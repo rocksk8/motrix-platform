@@ -3261,8 +3261,8 @@ def _build_case_closing_html(data: dict) -> str:
     _dp_pretax = summary.get("dispatchBasis") == "pretax"
     dispatch_rows_html = "".join(
         f'<tr><td>{esc(dp["vendorName"])}</td><td>{esc(dp["date"])}</td><td>{esc(dp["scope"])}</td>'
-        f'<td class="c">{esc(dp["status"])}</td><td class="r">{_dash(dp["fee"])}</td><td class="r">{_dash(dp["tax"])}</td>'
-        f'<td class="r">{_dash(dp["personnel"])}</td><td class="r">{money(dp["amount"])}</td></tr>'
+        f'<td class="c">{esc(dp["status"])}</td><td class="r">{esc(_dash(dp["fee"]))}</td><td class="r">{esc(_dash(dp["tax"]))}</td>'
+        f'<td class="r">{esc(_dash(dp["personnel"]))}</td><td class="r">{money(dp["amount"])}</td></tr>'
         for dp in data["dispatches"]
     )
     _dp_sum = sum(dp["amount"] for dp in data["dispatches"])
@@ -3278,11 +3278,11 @@ def _build_case_closing_html(data: dict) -> str:
         if isinstance(_un, (int, float)) and not isinstance(_un, bool) and _un > 0:
             _dp_notes.append(f'其中未對應品項 {money(_un)}（不在任何品項的實際成本內，第三節另列一行）。')
     if data.get("dispatchExcluded"):
-        _dp_notes.append(f'另有 {data["dispatchExcluded"]} 張草稿／已退回的派發單，精算不計成本，未列出。')
+        _dp_notes.append(f'另有 {int(data["dispatchExcluded"])} 張草稿／已退回的派發單，精算不計成本，未列出。')
     dispatch_notes_html = "".join(f'<div style="font-size:11px;color:#6B7280;margin:-4px 0 4px">{esc(t)}</div>' for t in _dp_notes)
     dispatch_section = (
         f'<div class="section-label">{next(_cn_nums)}、承攬商／外包派發明細</div>'
-        '<table><thead><tr><th>承攬商／人員</th><th style="width:80px">派發日期</th><th>派發範圍</th>'
+        '<table data-testid="closing-dispatch-table"><thead><tr><th>承攬商／人員</th><th style="width:80px">派發日期</th><th>派發範圍</th>'
         '<th class="c" style="width:56px">狀態</th><th class="r" style="width:96px">承攬費（未稅）</th>'
         f'<th class="r" style="width:68px">{"稅額（不計入）" if _dp_pretax else "稅額"}</th>'
         '<th class="r" style="width:72px">外包人員</th><th class="r" style="width:84px">計入成本</th></tr></thead>'

@@ -6,6 +6,7 @@ d. 品項稅別註記依實際稅別；原始成本印含稅（讀者自己加�
 測試資料取 MQ-202607-045 的形狀（不碰正式庫）。"""
 import json
 import re
+from html.parser import HTMLParser
 
 import db
 import pdf_gen
@@ -69,18 +70,58 @@ def _html(quote_no=NO):
     return _STAMP.sub("<時間>", pdf_gen._build_case_closing_html(pdf_gen._case_closing_report_data(quote_no)))
 
 
-def _section(html, start, end):
-    a = html.index(start)
-    return html[a:html.index(end, a)]
+class _Dom(HTMLParser):
+    """結構化讀 PDF 的 HTML（不靠文案子字串定位）：data-testid 表格 → 列 → [(class, 文字)]；class＝meta 的區塊文字。"""
+
+    def __init__(self):
+        super().__init__()
+        self.tables, self.meta, self._tbl, self._row, self._cell, self._depth = {}, [], None, None, None, 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if self._depth:
+            self._depth += 1 if tag == "div" else 0
+        elif tag == "div" and a.get("class") == "meta":
+            self._depth = 1
+        if tag == "table" and a.get("data-testid"):
+            self._tbl = self.tables.setdefault(a["data-testid"], [])
+        elif tag == "tr" and self._tbl is not None:
+            self._row = []
+            self._tbl.append(self._row)
+        elif tag in ("td", "th") and self._row is not None:
+            self._cell = [a.get("class", ""), ""]
+            self._row.append(self._cell)
+
+    def handle_endtag(self, tag):
+        if self._depth and tag == "div":
+            self._depth -= 1
+        if tag in ("td", "th"):
+            self._cell = None
+        elif tag == "tr":
+            self._row = None
+        elif tag == "table":
+            self._tbl = None
+
+    def handle_data(self, data):
+        if self._cell is not None:
+            self._cell[1] += data
+        if self._depth:
+            self.meta.append(data)
+
+
+def _dom(html):
+    d = _Dom()
+    d.feed(html)
+    return d
 
 
 # ── b. 第六節派發明細 ────────────────────────────────────────────────────────────────
 def test_personnel_only_dispatches_show_their_amounts_not_zero(client):
     _seed()
-    sec = _html().split("承攬商／外包派發明細")[1]
-    tr = {m.group(1): m.group(0) for m in re.finditer(r"<tr><td>[^<]*</td><td>(\d{4}-\d\d-\d\d)</td>.*?</tr>", sec)}
+    rows = _dom(_html()).tables["closing-dispatch-table"]
+    tr = {r[1][1]: r for r in rows if len(r) == 8 and r[0][0] == ""}                          # 資料列：派發日期 → 該列的格子（表頭是 th、合計列只有 2 格）
     assert {"2026-07-10", "2026-07-12", "2026-07-18", "2026-08-29"} <= set(tr)
-    last = lambda row: re.findall(r"<td class=\"r\">([^<]*)</td>", row)[-1]                  # noqa: E731  最後一欄＝計入成本
+    last = lambda row: row[-1][1]                                                               # noqa: E731  最後一欄＝計入成本
     assert last(tr["2026-07-18"]) == "3,500", tr["2026-07-18"]                                # 只有外包人員：人員 3,500（舊版印 0）
     assert last(tr["2026-08-29"]) == "6,000", tr["2026-08-29"]                                # 兩人各 3,000
     assert last(tr["2026-07-10"]) == "12,600", tr["2026-07-10"]                               # 12,000＋稅 600
@@ -182,8 +223,9 @@ def test_old_case_without_new_keys_has_no_new_rows(client):
 def test_settlement_page_warns_on_untaxed_manual_items_without_changing_calculation():
     from core import source_tree
     html = source_tree.page_file("settlement.html").read_text(encoding="utf-8")
-    i = html.index("stl-taxbasis-warn-")
-    block = html[i - 200:i + 700]
+    tag = re.search(r"<div[^>]*stl-taxbasis-warn-[^>]*>(?P<body>.*?)</div>", html, re.S)               # 提示元件本身（以 testid 前綴辨識，不靠位置）
+    assert tag, "精算頁少了稅基提醒元件（data-testid stl-taxbasis-warn-）"
+    block = tag.group(0)
     assert "item.actualCostTaxMode === 'pretax' || item.actualCostTaxMode === 'taxed'" in block
     assert "!item.adoptSystem" in block and "actualSource !== 'labor'" in block
     assert "含稅5%（自動加總）" in block

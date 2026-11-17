@@ -91,8 +91,10 @@ def test_nothing_to_fall_back_on_prints_dashes(client):
 
 def test_not_finalized_prints_only_the_manual_settlement_date_in_the_header(client):
     _make("MQ-FIN-4", status="draft", settlement={"settlementDate": "2026-08-02", "finalizedAt": "", "summary": {}})
+    from tests.test_closing_report_amounts_2026_11_17 import _dom
     html = _html("MQ-FIN-4")
-    assert "<span>精算日期（手填）：</span>2026-08-02" in html and "完結日期：2026-08" not in html.split("一、收入與合約金額")[0]
+    meta = "".join(_dom(html).meta)                                                          # 表頭區塊（class=meta）的文字
+    assert "精算日期（手填）：2026-08-02" in meta and "完結日期：2026-08" not in meta
     _make("MQ-FIN-5", status="draft", settlement={"settlementDate": "", "summary": {}})
     assert "精算日期（手填）" not in _html("MQ-FIN-5")
 
