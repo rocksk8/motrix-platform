@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-17（fix/settlement-save-409；精算存檔 409 診斷；版號由列車取）
+- 診斷（無狀態碼、回應本文、權限變更）：精算存檔的三種 409 各帶固定詞彙的 `X-Fail-Reason`——`stale_version`（樂觀鎖版本過期）、`finalize_mismatch`（完結前重算與畫面不一致）、`not_won`（未成案）；`X-Fail-Detail` 只放欄位名稱／版本戳記，不放金額。
+- 稽核：失敗稽核（`fail.PUT`）`detail.msg`／`last_reason`／`last_msg` 記原因與版本戳記（資料庫現值在前、頁面帶的值截斷）；成功存檔的 `quotation.settlement` 稽核記回給頁面的 `updated_at`。
+- 測試：補存檔後再存／完結不誤報衝突的回歸測試與 e2e。
+
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 - 修正（只影響自訂報表選項，旗標後；h11 審查）：`report_source` 的狀態／成交標記／精算狀態選項改為只列呼叫者看得到的列的值、只讀實體欄位（不碰 `data_json`）、每人快取 60 秒；沒有使用者回空。
