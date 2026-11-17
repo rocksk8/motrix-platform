@@ -1,0 +1,99 @@
+"""瀏覽器端對端：報價單預覽的品項備註移到品項下方整列（2026-11-17，使用者裁示「有備註一律移到下方」）。
+
+預覽 modal 的 iframe 內容與 PDF 同一支 builder（pdf_gen._build_quote_html），所以這題同時代表 PDF 的版面：
+- 沒有「備註」欄表頭；每個有備註的品項下一列 .remark-row，備註框橫跨品名欄到最右（寬度 > 表格一半）
+- 長備註（兩行）不再把品項列撐高：品項列高度與無備註的品項列相同
+- 換行保留、短備註（「含安裝」）也在下方
+- 切內部版（含成本欄）備註列同樣橫跨到最右
+"""
+from tests._requires import requires_module  # noqa: E402
+import json
+import time
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+
+from tests._e2e_login import inject_login  # noqa: E402
+
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象')
+
+QUOTE_NO = "MQ-202611-171"
+DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
+LONG = "智慧人形／車形偵測 4路，每一路攝影機一套 AI 影像分析軟體授權；包含 Argo ONVIF 錄影授權 x16、AI 軟體授權金鑰 x1"
+
+
+def _seed():
+    import db
+    notes = ["", LONG + "\n第二行說明", "含安裝"]
+    items = [{"id": i + 1, "description": f"品項 {i + 1}", "brand": f"BR-{i + 1}", "qty": 1, "unit": "台",
+              "cost": 100, "margin": 0.35, "unitPrice": 160, "amount": 160, "notes": n}
+             for i, n in enumerate(notes)]
+    data = {"quoteNo": QUOTE_NO, "customerName": "備註客戶", "projectName": "備註專案", "status": "草稿",
+            "items": items, "tot": {"total": 504, "pretax": 480, "directMarginPct": 0, "netMarginPct": 0}}
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+            "data_json, created_at, updated_at, deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (QUOTE_NO, "草稿", "備註客戶", "備註專案", 504, 480, json.dumps(data, ensure_ascii=False),
+             "2026-11-01T00:00:00", "2026-11-01T00:00:00", "", "2026-11-01"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _frame(page):
+    page.locator("#quote-preview-frame").wait_for(state="visible", timeout=20000)
+    for _ in range(100):
+        fr = page.locator("#quote-preview-frame").element_handle().content_frame()
+        if fr:
+            try:
+                if fr.evaluate("() => document.readyState === 'complete' && !!document.getElementById('root')"):
+                    return fr
+            except Exception:
+                pass
+        time.sleep(0.1)
+    pytest.fail("預覽 iframe 沒有載入完成")
+
+
+_MEASURE = """() => {
+  const tbl = document.querySelector('#root table');
+  const tw = tbl.getBoundingClientRect().width;
+  const rows = [...tbl.querySelectorAll('tbody tr')];
+  const rem = [...tbl.querySelectorAll('tr.remark-row')].map(r => {
+    const box = r.querySelector('.rbox').getBoundingClientRect();
+    return {w: box.width, html: r.querySelector('.rbox').innerHTML, prev: r.previousElementSibling.innerText.slice(0, 6)};
+  });
+  const itemH = rows.filter(r => !r.classList.contains('remark-row')).map(r => Math.round(r.getBoundingClientRect().height));
+  return {tw, heads: [...tbl.querySelectorAll('thead th')].map(t => t.innerText.trim()), rem, itemH,
+          cols: tbl.querySelectorAll('thead th').length};
+}"""
+
+
+@pytest.mark.e2e
+def test_remarks_render_as_full_width_row_under_each_item(live_server, make_user, e2e_browser):
+    username, password = make_user(username="e2e_rm1", role="superadmin")
+    _seed()
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={QUOTE_NO}")
+    page.wait_for_function("() => document.body.innerText.includes('備註客戶')", timeout=20000)
+    page.evaluate(f"{DATA_JS}.openPreview('external')")
+    m = _frame(page).evaluate(_MEASURE)
+
+    assert "備註" not in m["heads"] and m["cols"] == 7, m["heads"]
+    assert len(m["rem"]) == 2                                   # 品項 2、3 有備註；品項 1 沒有
+    for r in m["rem"]:
+        assert r["w"] > m["tw"] * 0.6, ("備註框要橫跨品名欄到最右", r["w"], m["tw"])
+    assert "第二行說明" in m["rem"][0]["html"] and "<br>" in m["rem"][0]["html"]
+    assert m["rem"][1]["html"].endswith("含安裝")
+    # 品項列高度不被備註撐高：三個品項列（+ 沒有分組列）高度相同
+    assert max(m["itemH"]) - min(m["itemH"]) <= 2, m["itemH"]
+
+    # 內部版（含成本／毛利率欄）：同樣橫跨到最右
+    page.evaluate(f"{DATA_JS}.previewMode = 'internal'")
+    page.wait_for_function(f"() => {DATA_JS}.previewHtml.includes('35.0%')", timeout=20000)
+    m2 = _frame(page).evaluate(_MEASURE)
+    assert m2["cols"] == 9 and "備註" not in m2["heads"]
+    assert len(m2["rem"]) == 2 and all(r["w"] > m2["tw"] * 0.6 for r in m2["rem"]), m2

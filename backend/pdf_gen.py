@@ -318,14 +318,24 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
-    has_notes = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
     av = _alt_view(q)                       # 擇一方案（沒有 ⇒ {}，以下全部走原路徑）
     alt_rows = av.get('rows') or {}
+    # 備註一律移到該品項下方整列；整張單都沒有備註時，輸出與過去逐位元相同（沒有備註欄、沒有新 class／CSS）
+    has_remarks = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
+    def _remark_row(note, span, zebra):
+        # 備註一律移到該品項下方，從「品名」欄（# 欄之後）橫跨到最右；保留換行；與上方品項同一斑馬色
+        if not note:
+            return ''
+        return (f'<tr class="remark-row{" z" if zebra else ""}"><td></td>'
+                f'<td colspan="{span}"><div class="rbox"><b>備註</b>{esc(note).replace(chr(10), "<br>")}</div></td></tr>')
     item_rows = ''
     real_idx = 0
+    _row_n = 0                              # 已輸出的品項／分組列序（備註列不計）⇒ 斑馬紋以品項為單位，備註列跟著上方品項同色
+    _ncols = 9 if internal else 7           # 品項表欄數（備註欄已取消，備註一律改成品項下方整列）
     for i, item in enumerate(items):
         if item.get('type') == 'header':
-            colspan = (9 if internal else 7) - (0 if has_notes else 1)
+            colspan = _ncols - 1
+            _row_n += 1
             item_rows += (
                 f'<tr style="background:#EFF6FF">'
                 f'<td style="text-align:center;color:#93C5FD;font-size:10px">§</td>'
@@ -340,7 +350,11 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         real_idx += 1
         up  = item.get('unitPrice', 0)
         amt = item.get('amount', 0)
-        tr_open = '<tr style="color:#9CA3AF">' if info and info.get('state') == 'dropped' else '<tr>'
+        _note = (item.get('notes') or '').strip()
+        _row_n += 1
+        _cls = ' '.join(c for c in ('z' if _row_n % 2 == 0 else '', 'has-below' if _note else '') if c) if has_remarks else ''
+        _cls_attr = f' class="{_cls}"' if _cls else ''
+        tr_open = f'<tr{_cls_attr} style="color:#9CA3AF">' if info and info.get('state') == 'dropped' else f'<tr{_cls_attr}>'
         desc_html = esc(item.get("description", "")) + (f' <span style="font-size:10px;color:#6B7280">〔{esc(info.get("tag", ""))}：{esc(info.get("group", ""))}〕</span>' if info and info.get('state') != 'dropped' else (f' <span style="font-size:10px">〔{esc(info.get("tag", ""))}〕</span>' if info else ''))
         if internal:
             cost   = item.get('cost', 0) or 0
@@ -356,8 +370,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td class="r cost-cell">{f"{margin*100:.1f}%" if margin else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
-                f'</tr>'
+                + f'</tr>'
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0)
             )
         else:
             item_rows += (
@@ -369,8 +383,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td>{esc(item.get("unit",""))}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
-                f'</tr>'
+                + f'</tr>'
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0)
             )
 
     subtotal = tot.get('subtotal', 0)
@@ -463,7 +477,15 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px;text-align:center}\n'
         '  tbody tr:last-child td{border-bottom:none}\n'
         '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
-        '  td.r{text-align:center;font-family:Arial,sans-serif}\n'
+        + ('  tbody tr:nth-child(even) td{background:none}\n'      # 有備註列時斑馬紋改以品項為單位（備註列跟著上方品項同色），備註列不與品項列拆頁
+           '  tbody tr.z td{background:#FAFAF8}\n'
+           '  tbody tr.has-below td{border-bottom:none}\n'
+           '  tbody tr.remark-row{page-break-before:avoid;break-before:avoid}\n'
+           '  tbody tr.has-below{page-break-after:avoid;break-after:avoid}\n'
+           '  tbody tr.remark-row td{padding:0 9px 8px;text-align:left}\n'
+           '  .rbox{border-left:3px solid #94A3B8;background:#F4F4EE;padding:5px 10px;font-size:11px;color:#374151;line-height:1.6;text-align:left}\n'
+           '  .rbox b{color:#64748B;font-weight:600;margin-right:8px}\n' if has_remarks else '')
+        + '  td.r{text-align:center;font-family:Arial,sans-serif}\n'
         '  .totals{max-width:290px;margin-left:auto;border:1px solid #EDEAE4;border-radius:4px;overflow:hidden;margin-bottom:16px}\n'
         '  .total-row{display:flex;justify-content:space-between;padding:7px 13px;border-bottom:1px solid #F0EEE9;font-size:12px}\n'
         '  .total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F5F4F0;border-top:1.5px solid #0A0A0A}\n'
@@ -565,7 +587,6 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
            '      <th class="r cost-cell" style="width:64px">毛利率</th>\n' if internal else '')
         + '      <th class="r" style="width:120px">單價（未稅額）</th>\n'
         '      <th class="r" style="width:120px">金額（未稅）</th>\n'
-        + ('      <th style="width:72px">備註</th>\n' if has_notes else '')
         + '    </tr>\n'
         '  </thead>\n'
         + f'  <tbody>{item_rows}</tbody>\n'
