@@ -10,6 +10,7 @@
 6. 客戶版輸出不含成本／毛利字樣與數字；可變文字 esc。估價單共用同一個 builder。
 """
 import re
+from html.parser import HTMLParser
 
 import pytest
 
@@ -58,7 +59,70 @@ def _html(q, **kw):
 
 
 def _body(h):
-    return h.split("<body>")[1]
+    return re.sub(r"(?s)\A.*?<body[^>]*>", "", h, count=1)          # 去掉 <head>（含 <style>），只留 <body> 之後
+
+
+_VOID = {"br", "img", "meta", "link", "input", "hr", "col"}
+
+
+class _Node:
+    def __init__(self, tag, attrs):
+        self.tag, self.attrs, self.kids, self.parts = tag, dict(attrs), [], []
+
+    def classes(self):
+        return (self.attrs.get("class") or "").split()
+
+    def text(self):
+        return "".join(self.parts) + "".join(k.text() for k in self.kids)
+
+    def walk(self):
+        yield self
+        for k in self.kids:
+            yield from k.walk()
+
+    def find_all(self, tag=None, cls=None):
+        return [n for n in self.walk() if (tag is None or n.tag == tag) and (cls is None or cls in n.classes())]
+
+
+class _Tree(HTMLParser):
+    """極小的 DOM：測試用結構（標籤、class、欄數）定位，不靠文案子字串。"""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = _Node("#root", [])
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        n = _Node(tag, attrs)
+        self.stack[-1].kids.append(n)
+        if tag not in _VOID:
+            self.stack.append(n)
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, 0, -1):
+            if self.stack[i].tag == tag:
+                del self.stack[i:]
+                return
+
+    def handle_data(self, data):
+        self.stack[-1].parts.append(data)
+
+
+def _doc(h):
+    t = _Tree()
+    t.feed(_body(h))
+    t.close()
+    return t.root
+
+
+def _total_rows(doc):
+    """原合計框的列：{標籤: 值}（只認 .totals 底下的 .total-row，兩個 span：標籤、值）。"""
+    out = {}
+    for row in doc.find_all("div", cls="total-row"):
+        spans = row.find_all("span")
+        if len(spans) >= 2:
+            out[spans[0].text()] = spans[1].text()
+    return out
 
 
 def _money(v):
@@ -133,7 +197,7 @@ def test_pdf_single_group_table_replaces_totals_box():
     b = _body(h)
     assert '<div class="totals">' not in b, "未選完不再印原合計框"
     assert "依方案選擇：請擇一方案，回簽時勾選" in b
-    assert b.count("依方案選擇") == 1, "兩個合計格不再印文字；說明只出現一次"
+    assert _total_rows(_doc(h)) == {}, "兩個合計格不再印文字：原合計框的列整組不在"
     for col in ("方案</th>", "品項小計（未稅）</th>", "營業稅 5%</th>", "總計</th>"):
         assert col in b, col
     assert "稅前合計</th>" not in b, "沒運費／折讓 ⇒ 4 欄"
@@ -203,8 +267,10 @@ def test_pdf_switch_off_or_no_alt_is_unchanged(monkeypatch):
 def test_pdf_falls_back_to_old_box_when_plan_data_is_broken(monkeypatch):
     real = alt_view.view
     monkeypatch.setattr(pdf_gen, "_alt_view", lambda q: dict(real(q), plans={"mode": "combos"}))      # 缺 rows ⇒ KeyError 被吞
-    b = _body(_html(_one_group()))
-    assert '<div class="totals">' in b and b.count("依方案選擇") == 2
+    h = _html(_one_group())
+    assert '<div class="totals">' in _body(h)
+    rows = _total_rows(_doc(h))
+    assert rows["稅前合計"] == rows["總　計"] == "依方案選擇", "退回原合計框：兩格仍印設定文字"
 
 
 def test_pdf_escapes_every_variable_text(_settings):
@@ -256,9 +322,12 @@ def test_pdf_and_view_do_not_reference_internal_plan_module():
 
 
 def test_plan_table_html_has_no_unbalanced_tags():
-    b = _body(_html(_two_groups(freight=100)))
-    assert len(re.findall(r"<table", b)) == len(re.findall(r"</table>", b))
-    assert len(re.findall(r"<tr", b)) == len(re.findall(r"</tr>", b))
+    doc = _doc(_html(_two_groups(freight=100)))
+    plan = [t for t in doc.find_all("table") if t.find_all("th") and t.find_all("th")[0].text() == "方案"][0]
+    assert len(plan.find_all("th")) == 5, "有運費 ⇒ 方案／品項小計／稅前合計／稅額／總計"
+    assert len(plan.find_all("tr")) >= 2
+    for tr in plan.find_all("tr")[1:]:
+        assert len(tr.find_all("td")) == 5, "每列欄數＝表頭欄數（標籤沒配對好會對不上）"
 
 
 def test_plans_failure_does_not_break_view_or_pdf_and_falls_back_to_old_box(monkeypatch):
@@ -269,7 +338,9 @@ def test_plans_failure_does_not_break_view_or_pdf_and_falls_back_to_old_box(monk
     v = alt_view.view(q)
     assert v["has_alt"] is True and v["plans"] is None and v["total_text"] == "依方案選擇"
     b = _body(_html(q))
-    assert '<div class="totals">' in b and b.count("依方案選擇") == 2 and "請擇一方案" not in b
+    assert '<div class="totals">' in b and "請擇一方案" not in b
+    rows = _total_rows(_doc(_html(q)))
+    assert rows["稅前合計"] == rows["總　計"] == "依方案選擇", "退回原合計框：兩格仍印設定文字"
 
 
 def test_alt_view_has_no_double_star_call_arguments():
