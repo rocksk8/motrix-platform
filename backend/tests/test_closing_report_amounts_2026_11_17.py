@@ -180,8 +180,8 @@ def test_old_case_without_new_keys_has_no_new_rows(client):
 
 # ── d（精算頁）：只提示、不遷移 ──────────────────────────────────────────────────────
 def test_settlement_page_warns_on_untaxed_manual_items_without_changing_calculation():
-    from pathlib import Path
-    html = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "settlement.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("settlement.html").read_text(encoding="utf-8")
     i = html.index("stl-taxbasis-warn-")
     block = html[i - 200:i + 700]
     assert "item.actualCostTaxMode === 'pretax' || item.actualCostTaxMode === 'taxed'" in block
