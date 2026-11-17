@@ -94,7 +94,7 @@ from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送�
 from helpers.uploads import _effective_subfolder
 from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
-from modules.case.api.quotation_specs import merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
+from modules.case.api.quotation_specs import validate_merge_files as _validate_merge_files, merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base, build_quote_preview_html,
@@ -2019,6 +2019,30 @@ def _check_extra_notes(q: dict) -> None:
         raise HTTPException(400, f"備註事項過長（{len(v)} 字），上限 {EXTRA_NOTES_MAX} 字")
 
 
+def _check_merge_files(q: dict, quote_no=None) -> None:
+    """`mergeFiles`（併入輸出的規格文件 id，有序）存檔前檢查：只能引用**這張單自己**的規格檔（新單沒有 ⇒ 一律清空）；
+    清理（去重、丟掉已刪／別張單的 id）與格式錯誤的 400 由 `quotation_specs.validate_merge_files` 決定；
+    清理後是空的就不存這個鍵（與 extraNotes 同習慣：舊單與沒用這功能的單 data_json 不多任何鍵）。"""
+    if "mergeFiles" not in q:
+        return
+    if q.get("mergeFiles") is None:
+        q.pop("mergeFiles", None)
+        return
+    spec = "[]"
+    if quote_no:
+        _c = get_db()
+        try:
+            _r = _c.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            spec = (_r["spec_files_json"] if _r else "[]") or "[]"
+        finally:
+            _c.close()
+    ids = _validate_merge_files(q.get("mergeFiles"), spec)
+    if ids:
+        q["mergeFiles"] = ids
+    else:
+        q.pop("mergeFiles", None)
+
+
 def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
     modules/case/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
@@ -2079,6 +2103,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
     _check_extra_notes(q)
+    _check_merge_files(q)
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     if body.status == "待審核":
@@ -2495,6 +2520,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     _quote_custom_fields_gate(q, None)
     validate_quote_tax(q)
     _check_extra_notes(q)
+    _check_merge_files(q)
     validate_tax_basis(q, "已送出")
     q.pop("clauseTitles", None)
     _PG.prepare(q, user)                    # 利潤／公益金一律以「今天」的口徑計算（使用者裁示 2026-10-16 #2）
@@ -2585,6 +2611,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
     _check_extra_notes(q)
+    _check_merge_files(q, quote_no)
     # 第 48 班 S2：管銷分攤比率驗證／權限／戳記——放在最前面：開寫入連線與寄簽核通知『之前』就拒絕（422／403），不留連線也不寄信；
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
@@ -6009,6 +6036,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         q.pop(_k, None)
     validate_quote_tax(q)
     _check_extra_notes(q)
+    _check_merge_files(q, quote_no)
     q["quoteNo"] = quote_no
     conn = get_db()
     try:

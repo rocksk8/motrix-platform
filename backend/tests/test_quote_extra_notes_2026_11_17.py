@@ -406,3 +406,78 @@ def test_merge_files_change_makes_signed_approval_stale():
     from modules.case import content_fp as CFP
     assert CFP.content_fingerprint({"mergeFiles": ["a"]}) != CFP.content_fingerprint({"mergeFiles": ["a", "b"]})
     assert CFP.content_fingerprint({"mergeFiles": ["a", "b"]}) != CFP.content_fingerprint({"mergeFiles": ["b", "a"]}), "順序也是內容"
+
+
+# ── 6. mergeFiles 存檔驗證（與 quotation_specs 接線；規格檔端點的行為由 test_quote_spec_files 負責）─────────
+
+def _blank_pdf(pages=1):
+    import io
+    import pypdf
+    w = pypdf.PdfWriter()
+    for _ in range(pages):
+        w.add_blank_page(width=200, height=200)
+    out = io.BytesIO()
+    w.write(out)
+    return out.getvalue()
+
+
+def _quote_with_specs(client, make_user, username, n=2):
+    u, pw = make_user(username=username, role="admin")
+    h = _login(client, u, pw)
+    r = client.post("/api/quotations", headers=h, json=_payload())
+    assert r.status_code == 201, r.text
+    no = r.json()["quote_no"]
+    r = client.post(f"/api/quotations/{no}/spec-files", headers=h,
+                    files=[("files", (f"規格{i}.pdf", _blank_pdf(i + 1), "application/pdf")) for i in range(n)])
+    assert r.status_code == 200, r.text
+    return h, no, [f["id"] for f in r.json()["specFiles"]]
+
+
+def _put(client, h, no, **extra):
+    d = _data_json(no)
+    d.update(extra)
+    return client.put(f"/api/quotations/{no}", headers=h, json={"status": "草稿", "data": d})
+
+
+def test_merge_files_saved_in_order_and_unknown_ids_dropped(client, make_user):
+    h, no, ids = _quote_with_specs(client, make_user, "xn_mf_ok")
+    r = _put(client, h, no, mergeFiles=[ids[1], "不存在", ids[0], ids[1]])
+    assert r.status_code == 200, r.text
+    assert _data_json(no)["mergeFiles"] == [ids[1], ids[0]], "保序、去重、丟掉不屬於這張單的 id"
+    hist = _data_json(no).get("editHistory") or []
+    assert any(c.get("field") == "併入輸出的規格文件" and c.get("to") == "2 個檔" for e in hist for c in (e.get("changes") or [])), hist
+    r = _put(client, h, no, mergeFiles=[ids[0], ids[1]])      # 個數相同、順序變了：註記要看得出來
+    assert r.status_code == 200
+    hist = _data_json(no)["editHistory"]
+    assert any(c.get("to") == "2 個檔（內容或順序已變更）" for e in hist for c in (e.get("changes") or [])), hist
+    r = _put(client, h, no, mergeFiles=[])
+    assert r.status_code == 200 and "mergeFiles" not in _data_json(no), "空＝不存鍵"
+
+
+def test_merge_files_bad_shapes_are_400_and_new_quote_clears_it(client, make_user):
+    h, no, ids = _quote_with_specs(client, make_user, "xn_mf_bad")
+    assert _put(client, h, no, mergeFiles="x").status_code == 400
+    assert _put(client, h, no, mergeFiles=[1, 2]).status_code == 400
+    assert _put(client, h, no, mergeFiles=["a%d" % i for i in range(11)]).status_code == 400
+    assert _put(client, h, no, mergeFiles=None).status_code == 200 and "mergeFiles" not in _data_json(no)
+    # 新單沒有任何規格檔：帶來的 id（例如複製自別張單）一律清空
+    r = client.post("/api/quotations", headers=h, json=_payload(mergeFiles=ids))
+    assert r.status_code == 201, r.text
+    assert "mergeFiles" not in _data_json(r.json()["quote_no"])
+
+
+def test_merge_files_cannot_reference_another_quotes_files(client, make_user):
+    h, no, ids = _quote_with_specs(client, make_user, "xn_mf_x1")
+    h2, no2, ids2 = _quote_with_specs(client, make_user, "xn_mf_x2", n=1)
+    r = _put(client, h2, no2, mergeFiles=[ids[0], ids2[0]])
+    assert r.status_code == 200, r.text
+    assert _data_json(no2)["mergeFiles"] == [ids2[0]], "別張單的規格檔 id 不可引用"
+
+
+def test_deleting_a_spec_file_drops_it_from_merge_files(client, make_user):
+    h, no, ids = _quote_with_specs(client, make_user, "xn_mf_del")
+    assert _put(client, h, no, mergeFiles=ids).status_code == 200
+    r = client.delete(f"/api/quotations/{no}/spec-files/{ids[0]}", headers=h)
+    assert r.status_code == 200, r.text
+    assert _data_json(no)["mergeFiles"] == [ids[1]]
+
