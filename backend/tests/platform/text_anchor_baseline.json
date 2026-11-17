@@ -266,6 +266,6 @@
   "backend/tests/test_vendor_paths_are_versioned_2026_09_24.py": 1,
   "backend/tests/test_verify_package_2026_09_23.py": 4
  },
- "total": 943,
+ "total": 942,
  "version": 2
 }
