@@ -2104,6 +2104,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
     _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
+    q.pop("_specChanges", None)                # 解鎖存檔專用的暫存動作；建單／歷史建單不接受（不可原樣存進 data_json）
     _check_extra_notes(q)
     _check_merge_files(q)
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
@@ -2521,6 +2522,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["caseRecord"].pop("customFields", None)
     _quote_custom_fields_gate(q, None)
     validate_quote_tax(q)
+    q.pop("_specChanges", None)                # 解鎖存檔專用的暫存動作；建單／歷史建單不接受（不可原樣存進 data_json）
     _check_extra_notes(q)
     _check_merge_files(q)
     validate_tax_basis(q, "已送出")
@@ -6060,7 +6062,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
     q   = body.data
     now = datetime.now().isoformat()
-    for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
+    for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "_specChanges", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
         q.pop(_k, None)
     validate_quote_tax(q)
     _check_extra_notes(q)

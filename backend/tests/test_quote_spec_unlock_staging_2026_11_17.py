@@ -471,3 +471,49 @@ def test_gate_tuple_still_identical_to_put_quotation_source():
     src = open(os.path.join(os.path.dirname(QS.__file__), "quotations.py"), encoding="utf-8").read()
     lit = "_LOCKED = (" + ",".join('"%s"' % s for s in QS.EDIT_LOCKED_STATUSES)
     assert lit.replace(" ", "") in src.replace(" ", "")
+
+
+# ── _specChanges 是解鎖存檔專用鍵：其他寫入路徑不可原樣存進 data_json ─────────────────
+
+_SC = {"add": ["x"], "remove": ["y"]}
+
+
+def test_create_quotation_does_not_store_spec_changes(client, world):
+    r = client.post("/api/quotations", headers=world["sa"], json={"status": "草稿", "data": {
+        "customerName": "客戶", "projectName": "新單", "items": [], "_specChanges": _SC}})
+    assert r.status_code == 201, r.text
+    assert "_specChanges" not in _data(r.json()["quote_no"])
+
+
+def test_create_historical_quotation_does_not_store_spec_changes(client, world):
+    from helpers import settings_registry as SR
+    c = db.get_db()
+    try:
+        SR.publish("quote_backfill", {"enabled": 1}, reason="測試", user="us_test", conn=c)
+        c.commit()
+        SR.invalidate("quote_backfill")
+    finally:
+        c.close()
+    try:
+        month = (datetime.now().replace(day=1) - timedelta(days=40)).strftime("%Y-%m-15")
+        r = client.post("/api/quotations/historical", headers=world["sa"], json={
+            "data": {"customerName": "補登客戶", "projectName": "歷史案件", "quoteDate": month, "items": [], "_specChanges": _SC},
+            "reason": "補登舊案件，紙本單據遺失重建"})
+        assert r.status_code == 201, r.text
+        assert "_specChanges" not in _data(r.json()["quote_no"])
+    finally:
+        c = db.get_db()
+        try:
+            SR.publish("quote_backfill", {"enabled": 0}, reason="測試還原", user="us_test", conn=c)
+            c.commit()
+            SR.invalidate("quote_backfill")
+        finally:
+            c.close()
+
+
+def test_review_edit_pops_spec_changes_before_any_validation():
+    import inspect
+    from modules.case.api import quotations as Q
+    src = inspect.getsource(Q.review_edit_quotation)
+    i = src.index('"_specChanges"')
+    assert i < src.index("_check_extra_notes(q)"), "review_edit 的控制旗標清單要含 _specChanges，且在驗證／存檔之前"
