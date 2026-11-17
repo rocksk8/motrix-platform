@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 1025,
-  "endpoints_api": 1021,
-  "write_total": 551,
-  "write_api": 551,
+  "endpoints_total": 1027,
+  "endpoints_api": 1023,
+  "write_total": 553,
+  "write_api": 553,
   "get_api": 470,
-  "distinct_paths_api": 869,
-  "write_with_body_api": 412,
-  "write_with_path_param_api": 371
+  "distinct_paths_api": 871,
+  "write_with_body_api": 413,
+  "write_with_path_param_api": 373
  },
  "select_star": {
-  "modules": 289,
+  "modules": 290,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -249,6 +249,11 @@
    "body": false
   },
   "DELETE /api/quotations/{quote_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/spec-files/{file_id}": {
    "w": true,
    "pp": 2,
    "body": false
@@ -4234,6 +4239,11 @@
    "body": true
   },
   "POST /api/quotations/{quote_no}/signed-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/spec-files": {
    "w": true,
    "pp": 1,
    "body": true

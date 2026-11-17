@@ -457,6 +457,9 @@ def test_merge_files_saved_in_order_and_unknown_ids_dropped(client, make_user):
 def test_merge_files_bad_shapes_are_400_and_new_quote_clears_it(client, make_user):
     h, no, ids = _quote_with_specs(client, make_user, "xn_mf_bad")
     assert _put(client, h, no, mergeFiles="x").status_code == 400
+    assert _put(client, h, no, mergeFiles={"a": 1}).status_code == 400
+    assert _put(client, h, no, mergeFiles=[1, {"x": 1}]).status_code == 400
+    assert _put(client, h, no, mergeFiles=["dup"] * 500).status_code == 400 or "mergeFiles" not in _data_json(no)
     assert _put(client, h, no, mergeFiles=[1, 2]).status_code == 400
     assert _put(client, h, no, mergeFiles=["a%d" % i for i in range(11)]).status_code == 400
     assert _put(client, h, no, mergeFiles=None).status_code == 200 and "mergeFiles" not in _data_json(no)

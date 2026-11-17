@@ -54,6 +54,13 @@
   ],
   "s": 400
  },
+ "DELETE /api/quotations/{quote_no}/spec-files/{file_id}": {
+  "k": [
+   "mergeFiles",
+   "specFiles"
+  ],
+  "s": 200
+ },
  "POST /api/approval/flows/copy": {
   "k": [
    "applied",
@@ -474,6 +481,21 @@
    "detail"
   ],
   "s": 403
+ },
+ "POST /api/quotations/{quote_no}/spec-files": {
+  "k": [
+   "mergeFiles",
+   "rejected",
+   "specFiles",
+   "specFiles[].id",
+   "specFiles[].name",
+   "specFiles[].pages",
+   "specFiles[].size",
+   "specFiles[].status",
+   "specFiles[].uploadedAt",
+   "specFiles[].uploadedBy"
+  ],
+  "s": 200
  },
  "POST /api/quotations/{quote_no}/stages/apply-template": {
   "k": [
@@ -908,6 +930,16 @@
    "detail"
   ],
   "s": 400
+ },
+ "PUT /api/settings/quote-notes-templates": {
+  "k": [
+   "templates",
+   "templates[].category",
+   "templates[].key",
+   "templates[].name",
+   "templates[].text"
+  ],
+  "s": 200
  },
  "PUT /api/system/backup-monitor/heartbeat-url": {
   "k": [
