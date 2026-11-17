@@ -148,11 +148,16 @@ def test_widths_do_not_depend_on_header_text():
     assert list(inspect.signature(pdf_gen._quote_col_widths).parameters) == ["items", "internal", "total"]
 
 
-def test_cost_cell_tint_is_pinned_when_remark_rows_shift_the_zebra():
-    """h19 審查：備註列讓 nth-child 奇偶錯位 ⇒ 成本欄橘底忽有忽無；有備註時成本欄底色固定（品項列橘、z 列灰）。"""
-    h = _html(_q(), internal=True)
-    a, b = h.index("tbody tr td.cost-cell{background:#FFF8F0}"), h.index("tbody tr.z td{background:#FAFAF8}")
-    assert h.index("tbody tr:nth-child(even) td{background:none}") < a < b
+def test_cost_cell_tint_wins_over_every_zebra_rule():
+    """PM：內部版成本／毛利率格要每一列都淡橘底，不被灰色斑馬紋蓋過。同權重時後寫的贏 ⇒ 橘底規則必須在所有斑馬規則（nth-child、.z）之後；
+    有備註、沒備註都一樣；客戶版沒有成本欄，不加這條。"""
+    for q in (_q(), _q(("", "", ""))):
+        h = _html(q, internal=True)
+        tint = h.rindex("tbody tr td.cost-cell{background:#FFF8F0}")
+        zebra = [h.rindex(r) for r in ("tbody tr:nth-child(even) td{", "tbody tr.z td{") if r in h]
+        assert zebra and all(tint > z for z in zebra), (tint, zebra)
+        assert h.count("tbody tr td.cost-cell{background:#FFF8F0}") == 1
+    assert "tbody tr td.cost-cell" not in _html(_q())
 
 
 def test_estimator_matches_measured_chromium_widths():

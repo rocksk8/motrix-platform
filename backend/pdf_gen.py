@@ -594,7 +594,6 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  tbody tr:last-child td{border-bottom:none}\n'
         '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
         + ('  tbody tr:nth-child(even) td{background:none}\n'      # 有備註列時斑馬紋改以品項為單位（備註列跟著上方品項同色），備註列不與品項列拆頁
-           '  tbody tr td.cost-cell{background:#FFF8F0}\n'         # 成本欄橘底固定（品項列一律有、斑馬 z 列改灰），不隨備註列造成的 DOM 奇偶錯位忽有忽無
            '  tbody tr.z td{background:#FAFAF8}\n'
            '  tbody tr.has-below td{border-bottom:none}\n'
            '  tbody tr.remark-row{page-break-before:avoid;break-before:avoid}\n'
@@ -604,6 +603,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
            # 小標 Arial 9px #999 600 字距 .1em（＝ .term-title）、左側強調線 #999（＝ 小標灰）
            '  .rbox{background:#FAFAF8;border:1px solid #EDEAE4;border-left:3px solid #999;border-radius:4px;padding:5px 10px;font-size:11px;color:#666;line-height:1.6;text-align:left}\n'
            '  .rbox b{font-family:Arial,sans-serif;font-size:9px;color:#999;font-weight:600;letter-spacing:.1em;margin-right:8px}\n' if has_remarks else '')
+        + ('  tbody tr td.cost-cell{background:#FFF8F0}\n' if internal else '')   # 內部版成本欄每列都淡橘底，不受斑馬紋（nth-child／.z）影響：權重相同、寫在斑馬規則之後
         + ('  table.items{table-layout:fixed}\n'                       # 欄寬由 <colgroup> 決定（依內容算出）；品名欄不給寬度，吃剩餘
            '  table.items thead th{width:auto!important}\n'          # 表頭 <th style="width:..."> 的預設寬度提示作廢（否則品名欄的 th 寬度會把剩餘寬度按比例攤給所有欄）
            '  table.items tbody td.r{white-space:nowrap}\n'

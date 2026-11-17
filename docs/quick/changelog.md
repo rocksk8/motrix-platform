@@ -25,7 +25,7 @@
 - **觸發條件**：品名與料號都不長、金額不大的單，版面不變；超過時（料號比預設 110px 放得下更長、品名一行放不進預設 190px、或金額比預設欄寬大）兩欄依內容自動調整，沒觸發＝完全不動（沒有 colgroup、沒有新 CSS）。
 - **內部版表頭成本欄看不見（既有問題，順手修）**：`.cost-cell{background:#FFF8F0}` 權重高過 `thead th`，把表頭「單位成本／毛利率」的黑底蓋成淡橘底配白字。內部版加 `thead th.cost-cell{background:#0A0A0A}`，淡橘底只剩 tbody 的 td。因此 `pdf_golden/expected_platform.json` 的 `quote_internal_draft` 有意更新（僅多這一行 CSS，其餘 14 題不動）。
 - **備註列樣式與報價單一致**：色票全取自報價單既有樣式——底 #FAFAF8／框 #EDEAE4／圓角 4px（同條款方框 `.term-item`）、字 #666（同 `.term-block`）、「備註」小標 Arial 9px #999 字距 .1em（同 `.term-title`），左線 #999；不使用報價單其他地方沒出現過的顏色（有單元測試把關）。
-- **內部版成本／毛利率欄橘底**：有備註列時，斑馬紋的奇偶會被備註列錯位，橘底忽有忽無（h19 審查）；有備註時 CSS 固定成本欄底色（品項列橘、斑馬 z 列灰）。
+- **內部版成本／毛利率欄橘底**：有備註列時，斑馬紋的奇偶會被備註列錯位，橘底忽有忽無（h19 審查）；使用者要求成本／毛利率格每一列都淡橘底、不受灰色斑馬紋影響 ⇒ 內部版加 `tbody tr td.cost-cell{background:#FFF8F0}`，同權重、寫在所有斑馬規則（nth-child、.z）之後，有無備註都一樣（`quote_internal_draft` golden 因此再多這一行 CSS，有意更新）。
 - **相容**：整張單都沒有備註、且沒有觸發欄寬調整時輸出逐位元不變；`tests/platform/pdf_golden` 只有內部版表頭修正使 `quote_internal_draft` 多一行 CSS（有意更新），其餘 14 題原樣通過。
 - **測試**：`test_quote_remark_below_row_2026_11_17.py`（含估價單客戶版／內部版）、`test_e2e_quote_remark_below_row_2026_11_17.py`。
 
