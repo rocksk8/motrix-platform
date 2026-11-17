@@ -1,13 +1,20 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-17（fix/quote-relock-saves；報價單解鎖編輯「重新鎖定」改為先儲存再鎖定；版號由列車取）
+## 1.0.243 — 2026-11-17（fix/quote-relock-saves；報價單解鎖編輯「重新鎖定」改為先儲存再鎖定；版號由列車取）
 - 修正（前端；後端、API、權限不變）：`quotation-form.html` 解鎖編輯中按「重新鎖定」，有未儲存的修改時改走與「儲存修改」相同的 `saveDraft()`（同樣的驗證、稽核、通知），成功後才鎖回去；失敗時維持解鎖、保留畫面上的修改並顯示原因。原本「重新鎖定」會直接放棄修改。`saveDraft()` 回傳成功／失敗並防重入（連按只存一次、不重複通知）。
-- 介面：解鎖橫幅的「取消解鎖」改為「放棄修改」（有未儲存的修改時先確認，確認後載回伺服器版並鎖定）；解鎖或非草稿單不再顯示「儲存草稿」「草稿已儲存」字樣。表單版號 V3.50→V3.51。
-- 測試：`tests/test_e2e_superadmin_approver_edit_entry_2026_11_13.py`（重新鎖定先存、無修改不送、存檔失敗保持解鎖、放棄修改、連按一次、無草稿字樣）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（複查編輯放棄修改）、`tests/test_form_version_bumped_2026_09_24.py`（V3.51 登記）。
+- 介面：解鎖橫幅的「取消解鎖」改為「放棄修改」（有未儲存的修改時先確認，確認後載回伺服器版並鎖定）；解鎖或非草稿單不再顯示「儲存草稿」「草稿已儲存」字樣。表單版號 V3.50→V4.0。
+- 測試：`tests/test_e2e_superadmin_approver_edit_entry_2026_11_13.py`（重新鎖定先存、無修改不送、存檔失敗保持解鎖、放棄修改、連按一次、無草稿字樣）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（複查編輯放棄修改）、`tests/test_form_version_bumped_2026_09_24.py`（V4.0 登記）。
 - **（併入）(next) — 2026-11-17（feat/quote-quoter-edit-superadmin；解鎖編輯改報價人由伺服器重帶並留舊→新紀錄；版號由列車取）**
 - 修正／補強（權限不變：解鎖編輯仍只有最高管理者；已送出／已成案解鎖時仍可改報價人，使用者 2026-11-17 裁示「維持可改、只補紀錄」；草稿的一般 PUT 不動）：`quotations.py::update_quotation` 的解鎖編輯路徑新增 `_resolve_unlock_quoter()`——報價人以 `salesPersonUsername` 為準，伺服器重查顯示名與電話（不採用用戶端送的名稱／電話；信箱沿用 `enforce_sales_email` 三層解析驗證）；換人時 `sales_person_id` 依帳號取（顯示名重複也不會歸錯人）、沒換人維持已存值；沒換人時報價人快照欄位維持已存值；要換人但帳號不存在／已停用、或只改名不帶帳號 ⇒ 400（不靜默略過）。
 - 稽核（舊→新、操作者）：寫進 `quotation.unlock_edit` 稽核細節 `quoterChange`、`editHistory` 該筆的 `quoterChange`（含信箱舊→新）、簽核理由 `approval.reasons`（「報價人變更：A → B（由 X 修改）」，簽核佇列與表單都顯示）與 `approval.quoterChange`。
 - 測試：`tests/test_unlock_edit_quoter_change_2026_11_17.py`；`modules/case/tests/test_content_fp_write_paths_s0_2026_11_06.py` 的分類表補 `salesPerson`／`salesPersonUsername`／`salesPhone` 為內容鍵（行為與未歸類時相同）。
+- **（併入）(next) — 2026-11-17（feat/quote-remark-below-row；報價單／估價單品項備註移到該品項下方整列＋欄寬依內容分配＋備註排版選項；整合者補條目，細節見 `docs/quick/changelog.md` 同日條目；版號由列車取）**
+  - 行為：有備註的品項，備註改印在該品項下方整列（不再擠在 72px 備註欄）；品名／料號欄寬依內容自動分配；每個品項可選備註「依輸入換行／連成一行」（`notesLayout`，`helpers/quote_item_notes.py` 清理，三條存檔路徑都過）。整張單沒有備註且沒觸發欄寬調整時，輸出與舊版逐位元相同。
+  - 修正：內部版表頭成本欄看不見、成本／毛利率欄底色固定。
+- **（併入）(next) — 2026-11-17（feat/quote-brand-column-label；報價單／估價單品項表欄名可自訂；整合者補條目；版號由列車取）**
+  - 行為：品項表兩個欄名（「品名 / 規格說明」「廠牌 / 型號」）可自訂（`columnLabels.item`／`columnLabels.brand`，`helpers/quote_brand_label.py`；去控制字元、截長、與預設相同＝移除）；報價單與估價單都套用；欄名變更列入送簽註記、編輯紀錄看得到。沒改欄名的單輸出不變。
+- **（併入）(next) — 2026-11-17（feat/quote-superadmin-see-all；報價單列表最高管理者預設看「全部」；整合者補條目；版號由列車取）**
+  - 前端（只改 `pages/quotations.html`，後端與權限不變）：新增「全部」頁籤；最高管理者進列表預設「全部」、三個數字卡改全公司（只算頁面載入的 ≤2000 張，超過會少算）；一般使用者預設與舊 localStorage 鍵不變，最高管理者改用新的 `_v2` 鍵。
 - **（併入）(next) — 2026-11-17（fix/closing-report-amounts；結案報表金額口徑、表頭日期與精算稅基提示；版號由列車取）**
 - 修正（只改結案報表 PDF 的顯示，不改任何已存資料／精算數字；`pdf_gen.py`）：①第六節派發金額改精算口徑（未稅承攬費＋稅額＋外包人員 `personnel_json`，經 `dispatch.row` 連接器取；原本只取 `total_amount`，只有外包人員的派發單印 0）——欄位拆成承攬費／稅額／外包人員／計入成本，加合計列，合計與第三節「承攬商派發成本」對得上（對不上就明說）；草稿／已退回的派發單精算不計成本，不列、只註記張數。②第三節新增「其中：承攬商未對應品項」獨立一列（完結 summary 有 `dispatchUnassignedTotal` 且 >0 才印），能加得出時補等式「品項＋額外支出＋未對應＝實際總成本」。③已收金額＝各列實收淨額相加（沒有 `actualAmount` 只有 `feeAmount` 的列扣手續費，與逐列顯示同一函式 `receipt_amounts`）；還差尾款時收款率不印 100.0%（改 99.99%）。④品項稅別註記依實際稅別寫：有手填「未稅」「含稅5%（÷1.05）」品項（不含採用系統採購、來源人力、沒有稅別欄位的舊存檔）時，註記改寫實況並多一行稅基提醒（約 N 可能是稅基差、不一定是實際節省）；沒有這類品項 ⇒ 維持原文字。⑤「原始成本（料件）」在「收入 − 毛利」恰為成本×1.05 時改印含稅成本並註明未稅金額，讀者可自行加總出原始直接毛利；毛利不是這個口徑（缺鍵）時維持原樣。
 - 舊完結案重新產生結案報表時的預期差異（都是上列的顯示修正，不是回歸）：第三節標題的日期欄位（精算日期（手填）／完結日期／完結人）、第六節派發明細的欄位與金額口徑（並隱藏草稿／已退回的派發單）、「原始成本（料件）」在毛利為含稅口徑時改印含稅、只有手續費沒有實收金額的收款列合計會扣掉手續費；另第三節在有未對應品項時多一列、註記在有未稅手填品項時改寫。沒有這些情形的案件，其餘輸出不變。
@@ -30,7 +37,7 @@
 - 新增（行為：只有填了備註的單才有變化）：報價單／估價單多一個選填欄位 `extraNotes`（純文字、上限 20,000 字）。有填才在簽章之後另起新頁輸出「備註事項」（沿用條款樣式，續頁重複抬頭與頁尾，客戶版／內部版／估價單同一套）；沒填時 PDF 與舊單逐位元相同。換行、空行、縮排與「- 」條列原樣保留（HTML 跳脫）。
 - 新增（API）：`GET /api/settings/quote-notes-templates`（登入可讀）、`PUT`（僅最高管理者；驗證名稱／內容必填、名稱不可重複、最多 100 個、每個 20,000 字；寫稽核 `settings.quote_notes_templates.update` 並沿用 `quote_terms` 通知）。範本只是清單：套用＝把文字複製進單據，之後改／刪範本不動已開立的單。
 - 行為：備註事項列入編修紀錄與簽核變更註記（顯示字數）；簽核佇列詳情多一列備註全文與「變更項目」，且只列備註相關變更（不帶利潤率等財務欄位）；內容指紋把備註算內容（改了備註，已簽的簽核判過期）。
-- 前端：quotation-form 新增「七、備註事項」區塊（字數計數、套用範本：框內已有字時問取代／接在後面；範本超過 10 個才出現分類篩選與搜尋；最高管理者可「管理範本」，含「以目前備註內容新增」）；FORM_VERSION V3.51。
+- 前端：quotation-form 新增「七、備註事項」區塊（字數計數、套用範本：框內已有字時問取代／接在後面；範本超過 10 個才出現分類篩選與搜尋；最高管理者可「管理範本」，含「以目前備註內容新增」）；FORM_VERSION V4.0。
 - **（併入）(next) — 2026-11-17（feat/quote-spec-pdf-merge；備註事項 B：規格 PDF 併入；版號由列車取）**
 - 新增（**欄位**）：case migration 0013——`quotations.spec_files_json TEXT NOT NULL DEFAULT '[]'`（每筆 `{id,name,path,size,pages,status,uploadedAt,uploadedBy}`；`status`＝ok／encrypted／broken／empty）。只進不退：舊程式不認得這一欄也能跑（回滾不必動資料庫；整列 `SELECT *` 轉 dict 的地方只會多一個鍵）。
 - 新增（API）：`POST /api/quotations/{no}/spec-files`（多檔、僅 PDF；單檔不合格列在 `rejected`、不拖垮整批；上限 10 檔／單檔 20MB／合計 50MB）、`DELETE /api/quotations/{no}/spec-files/{id}`（刪檔＋清單＋`data_json.mergeFiles` 同一個寫交易，commit 之後才刪實體檔）。狀態鎖同 PUT 報價單（待審核／簽核中／已送出／已成案／已結案／已拒絕一律 403）；不動 `updated_at`。
@@ -38,7 +45,7 @@
 - 附件目錄：新來源類型 `quotation_spec`（資料夾 `uploads/quotation_specs/`，讀取規則同案件頁可讀）；回收筒快照／還原認得 `spec_files_json`。
 - 內部：`modules/case/pdf_merge.py`（純函式併檔；放在 case 模組內不升核心，**下次升核心版時評估收斂為 L1**；`docs/platform/modules.json` 已登記 `mod:case/pdf_merge`、`mod:case/api/quotation_specs`）；`case.doc_version` 提供者改指 `quotation_specs.record_doc_version_with_merge`（先併檔、再呼叫原 `_record_doc_version`）。
 - 新增（解鎖編輯期間可上傳／刪除規格檔，使用者裁示 2026-11-17）：鎖定狀態（待審核／簽核中／已送出／已成案／已結案）下，**最高管理者且有解鎖驗證證明**（`verify-unlock` 寫的 `quotation.unlock` 稽核列，本人＋本單＋12 小時內；PUT 本身只驗身分，規格檔多這一道）才能傳＝**暫存**（`spec_files_json` 項目帶 `staged:{by,at}`，不進清單／檔案中心／合併／mergeFiles）；已生效的檔在解鎖中不能由 DELETE 刪（403，畫面標待刪）。`PUT /api/quotations/{no}` 的 `data._specChanges={add:[暫存id],remove:[id]}`（只收 `_isUnlockEdit`＋最高管理者，否則 400；不存進 data_json）在**同一個寫入交易**套用：暫存轉正、待刪移除、本人其餘暫存丟掉，實體檔 commit 之後才刪；套用後 ≤10 檔／≤50MB，`mergeFiles` 以套用後清單驗證；寫入 editHistory（解鎖那筆的 `changes`＝`規格文件`）與稽核 `quotation.apply_spec_changes`。新端點 `POST /api/quotations/{no}/spec-files/discard-staged`（放棄修改：清本人暫存，冪等；不需解鎖證明）；暫存 24 小時後由下一次碰規格端點的人懶清掃。上傳／刪除回應多 `staged`（本人暫存清單）。稽核：`quotation.stage_spec_files`／`quotation.discard_spec_files`／`quotation.apply_spec_changes`。
-- 新增（前端，表單 V3.51）：解鎖編輯中規格文件面板可用——新上傳的檔標「待儲存」、已生效的檔按刪除只標「待刪除」（可「還原」）；按「儲存修改」才送 `data._specChanges`（`add`／`remove`）並重新送簽，按「重新鎖定」或放棄修改會呼叫 `discard-staged` 並回到原狀；剛解鎖時也先清一次上次沒收尾的暫存檔。鎖定且未解鎖時（待審核／簽核中也算）面板整個停用。
+- 新增（前端，表單 V4.0）：解鎖編輯中規格文件面板可用——新上傳的檔標「待儲存」、已生效的檔按刪除只標「待刪除」（可「還原」）；按「儲存修改」才送 `data._specChanges`（`add`／`remove`）並重新送簽，按「重新鎖定」或放棄修改會呼叫 `discard-staged` 並回到原狀；剛解鎖時也先清一次上次沒收尾的暫存檔。鎖定且未解鎖時（待審核／簽核中也算）面板整個停用。
 - ⚠️ 已知缺口（既有，T88 不擴大範圍，PM 記入下一班待辦）：`PUT /api/quotations/{no}` 的解鎖編輯（`_isUnlockEdit`）伺服器端**只檢查角色是最高管理者**，不核對個人解鎖密碼；`verify-unlock` 只是畫面流程、伺服器不留解鎖狀態，所以最高管理者直接帶 `_isUnlockEdit` 即可繞過解鎖密碼。**規格檔這條路徑（暫存上傳、套用 `_specChanges`）刻意比 PUT 嚴**：要求 `audit_log` 有本人、本單、12 小時內的 `quotation.unlock`（`verify-unlock` 通過才寫）。
 - 前端：無（由 h15 接）。
 

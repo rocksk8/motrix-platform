@@ -32,10 +32,10 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 27 | 10 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 188 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 31 | 189 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 13 | 0 | — |
-| `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 17 | — |
+| `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 18 | — |
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:account_lock` | L1 | 單一帳號登入鎖定（不分來源 IP；2026-11-12「外網登入強化」票）。 | 17 | 1 | `tests/test_external_login_hardening_2026_11_12.py`、`tests/test_attack_h1_extlogin_2026_11_12.py` |
@@ -44,8 +44,8 @@
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 19 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 15 | 105 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 149 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 15 | 106 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 150 | — |
 | `helper:auth_alert` | L1 | 登入鎖定告警（2026-11-12「登入失敗告警」票；外網 go-live 補上的門檻）。 | 12 | 2 | `tests/test_auth_lockout_alert_2026_11_12.py` |
 | `helper:backup_monitor` | L1 | 「備份與監控」專頁的資料與動作（2026-11-13；系統選單提案 v2 批次 4a）。 | 21 | 1 | `tests/test_backup_monitor_2026_11_13.py` |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
@@ -74,7 +74,7 @@
 | `helper:display_labels` | L1 | 小模組的狀態／單位／用語顯示名稱（C7）：網路規劃狀態、採購建議狀態、住宿計價單位與管道。**只改『看到的字』，狀態值（資料庫值）永遠不變。** | 7 | 4 | `backend/tests/platform/test_display_labels_c7.py` |
 | `helper:doc_render` | L1 | L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。 | 1 | 2 | `tests/platform/test_doc_render_2026_10_01.py` |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 21 | 9 | — |
-| `helper:doc_type` | L1 | 單據類型（報價單 quote／估價單 estimate）與「單號規則」的唯一來源（2026-11-13，估價單）。 | 23 | 16 | `backend/tests/test_estimate_doc_type_2026_11_13.py` |
+| `helper:doc_type` | L1 | 單據類型（報價單 quote／估價單 estimate）與「單號規則」的唯一來源（2026-11-13，估價單）。 | 23 | 17 | `backend/tests/test_estimate_doc_type_2026_11_13.py` |
 | `helper:download_name` | L1 | 下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。 | 6 | 24 | `tests/test_download_name_p1_2026_10_13.py` |
 | `helper:duty_role_matrix` | L1 | 職責角色「權限矩陣」的批次授予／取消（T86；SPEC 設定矩陣 §12 的角色端；使用者端是 `helpers/user_perm_batch.py`）。 | 6 | 1 | `tests/test_duty_role_matrix_2026_11_14.py` |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 23 | 7 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py`、`tests/test_user_perm_sensitive_gate_2026_11_13.py` |
@@ -187,7 +187,7 @@
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 9 | 4 | — |
 | `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 12 | 9 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 34 | — |
-| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 26 | 33 | — |
+| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 26 | 34 | — |
 | `helper:user_buttons` | L1 | 使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。 | 12 | 1 | `backend/tests/test_user_buttons_2026_10_14.py` |
 | `helper:user_import` | L1 | 員工（使用者帳號）批次匯入的規劃邏輯（T85 匯入精靈；端點 `POST /api/users/import-rows` 在 routers/auth.py）。（無單位卡） | 11 | 1 | — |
 | `helper:user_perm_batch` | L1 | 使用者權限頁的批次授予／取消與範本套用（設定矩陣 S3a；SPEC §4.9、§12）。 | 8 | 2 | `tests/test_user_perm_batch_2026_11_13.py` |

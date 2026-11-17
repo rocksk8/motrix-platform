@@ -452,6 +452,8 @@
     "helper:pdf_scripts",
     "helper:privacy_notice",
     "helper:profit_warning",
+    "helper:quote_brand_label",
+    "helper:quote_item_notes",
     "helper:quote_output",
     "helper:settings",
     "helper:settings_registry",
@@ -2314,6 +2316,19 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:quote_brand_label": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:doc_type"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/quote_brand_label.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:quote_email": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -2329,6 +2344,17 @@
    "tables_r": [
     "users"
    ],
+   "tables_w": []
+  },
+  "helper:quote_item_notes": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/quote_item_notes.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
    "tables_w": []
   },
   "helper:quote_output": {
@@ -3272,6 +3298,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -3341,6 +3368,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -3545,6 +3573,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -3601,6 +3630,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -3636,6 +3666,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -4188,6 +4219,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -5075,6 +5107,7 @@
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
     "mod:case/api/project_margin",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -10395,6 +10428,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "helper:xlsx_out",
+    "mod:arap/money_num",
     "mod:arap/receivables"
    ],
    "imports": [
@@ -10649,6 +10683,7 @@
     "helper:uploads",
     "helper:validation",
     "helper:xlsx_out",
+    "mod:arap/money_num",
     "mod:arap/recycle_adapter"
    ],
    "imports": [
@@ -10669,6 +10704,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "mod:arap/money_num",
     "mod:arap/recycle_adapter",
     "plat:registry",
     "plat:txn"
@@ -10681,79 +10717,79 @@
    "routes": [
     {
      "func": "list_invoice_vouchers",
-     "line": 249,
+     "line": 250,
      "method": "GET",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "get_invoice_voucher_remaining",
-     "line": 272,
+     "line": 273,
      "method": "GET",
      "path": "/api/invoice-vouchers/remaining"
     },
     {
      "func": "get_invoice_voucher",
-     "line": 293,
+     "line": 294,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "create_invoice_voucher",
-     "line": 306,
+     "line": 307,
      "method": "POST",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "delete_invoice_voucher",
-     "line": 469,
+     "line": 470,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "submit_invoice_voucher",
-     "line": 504,
+     "line": 505,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_invoice_voucher",
-     "line": 565,
+     "line": 566,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_invoice_voucher_approval",
-     "line": 675,
+     "line": 676,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_invoice_voucher",
-     "line": 716,
+     "line": 717,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_invoice_voucher_pdf",
-     "line": 763,
+     "line": 764,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_invoice_voucher_export",
-     "line": 787,
+     "line": 788,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/export"
     },
     {
      "func": "upload_invoice_voucher_issued_files",
-     "line": 815,
+     "line": 816,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
     },
     {
      "func": "delete_invoice_voucher_issued_file",
-     "line": 844,
+     "line": 845,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
     }
@@ -10894,6 +10930,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "mod:arap/money_num",
     "mod:arap/recycle_adapter"
    ],
    "imports": [
@@ -10912,6 +10949,7 @@
     "helper:recycle_bin",
     "helper:tiered_approval",
     "helper:validation",
+    "mod:arap/money_num",
     "mod:arap/recycle_adapter",
     "plat:registry",
     "plat:txn"
@@ -10924,79 +10962,79 @@
    "routes": [
     {
      "func": "list_payment_requests",
-     "line": 310,
+     "line": 311,
      "method": "GET",
      "path": "/api/payment-requests"
     },
     {
      "func": "get_payment_request_remaining",
-     "line": 333,
+     "line": 334,
      "method": "GET",
      "path": "/api/payment-requests/remaining"
     },
     {
      "func": "list_payment_request_stages",
-     "line": 350,
+     "line": 351,
      "method": "GET",
      "path": "/api/payment-requests/stages"
     },
     {
      "func": "get_payment_request",
-     "line": 361,
+     "line": 362,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "create_payment_request",
-     "line": 374,
+     "line": 375,
      "method": "POST",
      "path": "/api/payment-requests"
     },
     {
      "func": "update_payment_request",
-     "line": 466,
+     "line": 467,
      "method": "PUT",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "delete_payment_request",
-     "line": 564,
+     "line": 565,
      "method": "DELETE",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "submit_payment_request",
-     "line": 599,
+     "line": 600,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/submit"
     },
     {
      "func": "approve_payment_request",
-     "line": 660,
+     "line": 661,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/approve"
     },
     {
      "func": "revoke_payment_request_approval",
-     "line": 769,
+     "line": 770,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/revoke-approval"
     },
     {
      "func": "reject_payment_request",
-     "line": 810,
+     "line": 811,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/reject"
     },
     {
      "func": "download_payment_request_pdf",
-     "line": 857,
+     "line": 858,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}/pdf-download"
     },
     {
      "func": "record_payment_request_export",
-     "line": 881,
+     "line": 882,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -11099,6 +11137,19 @@
    ],
    "tables_w": []
   },
+  "mod:arap/money_num": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/money_num.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:arap/receivables": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -11106,7 +11157,8 @@
     "core:db",
     "helper:legal_params",
     "helper:option_lists",
-    "helper:tax_calc"
+    "helper:tax_calc",
+    "mod:arap/money_num"
    ],
    "kind": "mod",
    "module_key": "arap",
@@ -11165,6 +11217,7 @@
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
     "mod:case/api/project_margin",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -11382,6 +11435,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -11757,6 +11811,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/notify_next",
     "mod:case/payable_calendar",
     "mod:case/payables",
@@ -12126,6 +12181,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -12919,6 +12975,7 @@
     "mod:case/material_recognize",
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
+    "mod:case/money_num",
     "mod:case/po_auto_approve",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -13124,6 +13181,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -13472,6 +13530,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -13665,6 +13724,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -13873,6 +13933,7 @@
     "mod:case/material_payable_event",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/payable_calendar",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -14135,6 +14196,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -14336,6 +14398,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -14404,6 +14467,207 @@
     "vendor_contractors"
    ],
    "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_material_payment_lines",
+    "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
+    "config_change_events",
+    "config_changes",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
+    "duty_roles",
+    "line_event_usage_daily",
+    "notifications",
+    "permission_changes",
+    "quotations",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
+  "mod:case/api/quotation_specs": {
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:alert_settings",
+    "helper:approval_queue",
+    "helper:attachment_slots",
+    "helper:audit",
+    "helper:auth",
+    "helper:builtin_fields",
+    "helper:case_access",
+    "helper:clause_titles",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:config_ledger",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
+    "helper:dates",
+    "helper:display_labels",
+    "helper:doc_render",
+    "helper:doc_template",
+    "helper:doc_type",
+    "helper:duty_roles",
+    "helper:email_notify",
+    "helper:event_audience",
+    "helper:expense_types",
+    "helper:export_templates",
+    "helper:field_catalog",
+    "helper:financial_mask",
+    "helper:formula",
+    "helper:image_guard",
+    "helper:legal_params",
+    "helper:line_catalog",
+    "helper:line_notify",
+    "helper:line_quota",
+    "helper:line_recipients",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:notify_matrix",
+    "helper:notify_templates",
+    "helper:onepipe_flags",
+    "helper:pdf_scripts",
+    "helper:prefill_sources",
+    "helper:profit_warning",
+    "helper:quote_email",
+    "helper:quote_privacy",
+    "helper:recognition_basis",
+    "helper:recycle_bin",
+    "helper:row_access",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_groups_brand",
+    "helper:settings_groups_custom_reports",
+    "helper:settings_groups_external",
+    "helper:settings_groups_import_wizard",
+    "helper:settings_groups_legal_reminder",
+    "helper:settings_groups_list_view",
+    "helper:settings_groups_lodging_freshness",
+    "helper:settings_groups_onepipe",
+    "helper:settings_groups_overhead",
+    "helper:settings_groups_payslip_picker",
+    "helper:settings_groups_profit",
+    "helper:settings_groups_q0",
+    "helper:settings_groups_recycle_bin",
+    "helper:settings_groups_tender_closing",
+    "helper:settings_notify",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "helper:status_display",
+    "helper:storage_slots",
+    "helper:tax_calc",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "helper:validation",
+    "helper:xlsx_out",
+    "mod:case/content_fp",
+    "mod:case/expense_forms",
+    "mod:case/material_approval",
+    "mod:case/material_coverage",
+    "mod:case/material_coverage_view",
+    "mod:case/material_guard",
+    "mod:case/material_notify",
+    "mod:case/material_payment",
+    "mod:case/material_recognize",
+    "mod:case/money_num",
+    "mod:case/pdf_merge",
+    "mod:case/purchase_items",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
+   ],
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:audit",
+    "helper:auth",
+    "helper:uploads",
+    "mod:case/api/quotations",
+    "mod:case/pdf_merge",
+    "mod:case/quotations"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/api/quotation_specs.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "upload_spec_files",
+     "line": 425,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/spec-files"
+    },
+    {
+     "func": "delete_spec_file",
+     "line": 516,
+     "method": "DELETE",
+     "path": "/api/quotations/{quote_no}/spec-files/{file_id}"
+    },
+    {
+     "func": "discard_staged_spec_files",
+     "line": 571,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/spec-files/discard-staged"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "audit_log"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_material_payments",
+    "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "custom_record_finance_outbox",
+    "custom_record_values",
+    "custom_records",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "expense_categories",
+    "projects",
+    "quotations",
+    "recycle_bin",
+    "sessions",
+    "shipping_notes",
+    "suppliers",
+    "system_settings",
+    "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users",
+    "vendor_contractors"
+   ],
+   "tables_w": [
+    "quotations"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "case_extra_expenses",
@@ -14527,6 +14791,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -14781,7 +15046,9 @@
     "helper:privacy_notice",
     "helper:profit_rules",
     "helper:profit_warning",
+    "helper:quote_brand_label",
     "helper:quote_email",
+    "helper:quote_item_notes",
     "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -14833,6 +15100,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/notify_next",
     "mod:case/payable_calendar",
     "mod:case/payable_reminders",
@@ -14879,7 +15147,9 @@
     "helper:privacy_notice",
     "helper:profit_rules",
     "helper:profit_warning",
+    "helper:quote_brand_label",
     "helper:quote_email",
+    "helper:quote_item_notes",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
@@ -14893,12 +15163,14 @@
     "mod:case/alt_sign",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/quotation_specs",
     "mod:case/case_deadlines",
     "mod:case/case_stage_tasks",
     "mod:case/content_fp",
     "mod:case/invoice_notify",
     "mod:case/material_guard",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/notify_next",
     "mod:case/profit_guard",
     "mod:case/quotations",
@@ -14921,379 +15193,379 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 997,
+     "line": 1026,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 1103,
+     "line": 1132,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 1353,
+     "line": 1382,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1458,
+     "line": 1487,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1499,
+     "line": 1528,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "reconfirm_shadow_stats",
-     "line": 1547,
+     "line": 1576,
      "method": "GET",
      "path": "/api/quotations/reconfirm-shadow-stats"
     },
     {
      "func": "gate_matrix",
-     "line": 1567,
+     "line": 1596,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "submit_precheck",
-     "line": 1675,
+     "line": 1704,
      "method": "GET",
      "path": "/api/quotations/submit-precheck"
     },
     {
      "func": "get_quotation",
-     "line": 1708,
+     "line": 1737,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1763,
+     "line": 1793,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1786,
+     "line": 1816,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1922,
+     "line": 1952,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1947,
+     "line": 1977,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 2024,
+     "line": 2101,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "historical_config",
-     "line": 2392,
+     "line": 2475,
      "method": "GET",
      "path": "/api/quotations/historical/config"
     },
     {
      "func": "historical_next_no",
-     "line": 2407,
+     "line": 2490,
      "method": "GET",
      "path": "/api/quotations/historical/next-no"
     },
     {
      "func": "create_historical_quotation",
-     "line": 2422,
+     "line": 2505,
      "method": "POST",
      "path": "/api/quotations/historical"
     },
     {
      "func": "update_quotation",
-     "line": 2530,
+     "line": 2656,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 2922,
+     "line": 3105,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 3008,
+     "line": 3191,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 3340,
+     "line": 3523,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 3404,
+     "line": 3587,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 3443,
+     "line": 3626,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 3566,
+     "line": 3749,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 3694,
+     "line": 3877,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 3743,
+     "line": 3926,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 3968,
+     "line": 4151,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 4417,
+     "line": 4600,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 4440,
+     "line": 4623,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 4503,
+     "line": 4686,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "record_export",
-     "line": 4725,
+     "line": 4908,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4823,
+     "line": 5006,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4955,
+     "line": 5138,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4996,
+     "line": 5179,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 5037,
+     "line": 5220,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 5071,
+     "line": 5254,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 5097,
+     "line": 5280,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 5136,
+     "line": 5319,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 5162,
+     "line": 5345,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 5194,
+     "line": 5377,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 5223,
+     "line": 5406,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 5267,
+     "line": 5450,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 5774,
+     "line": 5957,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "review_edit_quotation",
-     "line": 5945,
+     "line": 6128,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/review-edit"
     },
     {
      "func": "reject_quotation",
-     "line": 6096,
+     "line": 6281,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 6191,
+     "line": 6376,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 6262,
+     "line": 6447,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 6408,
+     "line": 6593,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "add_case_update_files",
-     "line": 6527,
+     "line": 6712,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files"
     },
     {
      "func": "delete_case_update",
-     "line": 6593,
+     "line": 6778,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 6626,
+     "line": 6811,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 6654,
+     "line": 6839,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 6696,
+     "line": 6881,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 6754,
+     "line": 6944,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 6826,
+     "line": 7016,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 6865,
+     "line": 7055,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 6898,
+     "line": 7088,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 7494,
+     "line": 7706,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 7614,
+     "line": 7826,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 7693,
+     "line": 7905,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 7862,
+     "line": 8074,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 7876,
+     "line": 8088,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 7907,
+     "line": 8119,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -15501,6 +15773,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -15691,6 +15964,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_recognize",
+    "mod:case/money_num",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
@@ -15719,13 +15993,13 @@
    "routes": [
     {
      "func": "get_settlement",
-     "line": 31,
+     "line": 41,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 55,
+     "line": 65,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     }
@@ -16388,6 +16662,19 @@
    "tables_r": [],
    "tables_w": []
   },
+  "mod:case/money_num": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/money_num.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:case/notify_next": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -16482,6 +16769,19 @@
    "tables_w": [
     "case_extra_expenses"
    ]
+  },
+  "mod:case/pdf_merge": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/pdf_merge.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "mod:case/po_auto_approve": {
    "api_prefixes": [],
@@ -16646,6 +16946,7 @@
     "mod:case/expense_forms",
     "mod:case/material_approval",
     "mod:case/material_payment",
+    "mod:case/money_num",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "plat:registry"
@@ -24378,6 +24679,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -24404,6 +24706,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -25796,6 +26099,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -25816,6 +26120,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26275,6 +26580,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26296,6 +26602,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26361,6 +26668,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26387,6 +26695,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26655,6 +26964,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26676,6 +26986,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26737,6 +27048,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26758,6 +27070,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -26983,6 +27296,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
@@ -35858,308 +36172,320 @@
      "path": "/api/settings/quote-terms-presets"
     },
     {
+     "func": "get_quote_notes_templates",
+     "line": 2902,
+     "method": "GET",
+     "path": "/api/settings/quote-notes-templates"
+    },
+    {
+     "func": "set_quote_notes_templates",
+     "line": 2909,
+     "method": "PUT",
+     "path": "/api/settings/quote-notes-templates"
+    },
+    {
      "func": "get_cloud_backup_target_setting",
-     "line": 2895,
+     "line": 3001,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2902,
+     "line": 3008,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2914,
+     "line": 3020,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2950,
+     "line": 3056,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2966,
+     "line": 3072,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 3008,
+     "line": 3114,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 3046,
+     "line": 3152,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 3072,
+     "line": 3178,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "get_line_notify",
-     "line": 3096,
+     "line": 3202,
      "method": "GET",
      "path": "/api/settings/line-notify"
     },
     {
      "func": "set_line_notify_event_audience",
-     "line": 3155,
+     "line": 3261,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}/audience"
     },
     {
      "func": "set_line_notify_event_roles",
-     "line": 3175,
+     "line": 3281,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}/roles"
     },
     {
      "func": "get_line_notify_quota",
-     "line": 3193,
+     "line": 3299,
      "method": "GET",
      "path": "/api/settings/line-notify/quota"
     },
     {
      "func": "set_line_notify_event",
-     "line": 3201,
+     "line": 3307,
      "method": "PUT",
      "path": "/api/settings/line-notify/events/{key}"
     },
     {
      "func": "preview_line_notify_events_batch",
-     "line": 3270,
+     "line": 3376,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch-preview"
     },
     {
      "func": "set_line_notify_events_batch",
-     "line": 3291,
+     "line": 3397,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch"
     },
     {
      "func": "undo_line_notify_events_batch",
-     "line": 3380,
+     "line": 3486,
      "method": "POST",
      "path": "/api/settings/line-notify/events/batch-undo"
     },
     {
      "func": "set_line_notify",
-     "line": 3406,
+     "line": 3512,
      "method": "PUT",
      "path": "/api/settings/line-notify"
     },
     {
      "func": "verify_line_notify",
-     "line": 3466,
+     "line": 3572,
      "method": "POST",
      "path": "/api/settings/line-notify/verify"
     },
     {
      "func": "line_login_callback",
-     "line": 3507,
+     "line": 3613,
      "method": "GET",
      "path": "/api/line/callback"
     },
     {
      "func": "get_line_binding",
-     "line": 3517,
+     "line": 3623,
      "method": "GET",
      "path": "/api/line/binding"
     },
     {
      "func": "get_line_prefs",
-     "line": 3528,
+     "line": 3634,
      "method": "GET",
      "path": "/api/line/prefs"
     },
     {
      "func": "set_line_pref",
-     "line": 3536,
+     "line": 3642,
      "method": "PUT",
      "path": "/api/line/prefs/{key}"
     },
     {
      "func": "start_line_binding",
-     "line": 3554,
+     "line": 3660,
      "method": "POST",
      "path": "/api/line/binding/start"
     },
     {
      "func": "unlink_own_line",
-     "line": 3573,
+     "line": 3679,
      "method": "DELETE",
      "path": "/api/line/binding"
     },
     {
      "func": "unlink_line_of",
-     "line": 3583,
+     "line": 3689,
      "method": "DELETE",
      "path": "/api/line/binding/{username}"
     },
     {
      "func": "get_line_bindings",
-     "line": 3594,
+     "line": 3700,
      "method": "GET",
      "path": "/api/settings/line-notify/bindings"
     },
     {
      "func": "remind_line_bindings",
-     "line": 3602,
+     "line": 3708,
      "method": "POST",
      "path": "/api/settings/line-notify/bindings/remind"
     },
     {
      "func": "test_email_notify",
-     "line": 3618,
+     "line": 3724,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "email_notify_providers",
-     "line": 3731,
+     "line": 3837,
      "method": "GET",
      "path": "/api/settings/email-notify/providers"
     },
     {
      "func": "email_notify_wizard_test_me",
-     "line": 3784,
+     "line": 3890,
      "method": "POST",
      "path": "/api/settings/email-notify/wizard/test-me"
     },
     {
      "func": "email_notify_wizard_activate",
-     "line": 3841,
+     "line": 3947,
      "method": "POST",
      "path": "/api/settings/email-notify/wizard/activate"
     },
     {
      "func": "get_custom_roles",
-     "line": 3865,
+     "line": 3971,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 3871,
+     "line": 3977,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 3898,
+     "line": 4004,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 3922,
+     "line": 4028,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_heartbeat_status",
-     "line": 3947,
+     "line": 4053,
      "method": "GET",
      "path": "/api/system/heartbeat"
     },
     {
      "func": "get_schema_status",
-     "line": 3956,
+     "line": 4062,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 3986,
+     "line": 4092,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 4001,
+     "line": 4107,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 4016,
+     "line": 4122,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 4049,
+     "line": 4155,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 4093,
+     "line": 4199,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 4167,
+     "line": 4273,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 4302,
+     "line": 4408,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 4333,
+     "line": 4439,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 4349,
+     "line": 4455,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 4390,
+     "line": 4496,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 4419,
+     "line": 4525,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 4458,
+     "line": 4564,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 4467,
+     "line": 4573,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 4485,
+     "line": 4591,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -36808,6 +37134,7 @@
     "helper:settings_registry",
     "helper:system_checks",
     "mod:analytics/api/dashboard",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotations",
     "mod:case/quotations",
     "router:definitions",
@@ -39385,6 +39712,7 @@
    "writers": [
     "core:db",
     "mod:case/alt_sign",
+    "mod:case/api/quotation_specs",
     "mod:case/api/quotations",
     "mod:case/material_change",
     "mod:case/material_payment",
