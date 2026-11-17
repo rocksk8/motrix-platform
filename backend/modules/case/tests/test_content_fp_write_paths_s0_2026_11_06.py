@@ -99,6 +99,7 @@ EXCLUDED_KEYS = EXCLUDED_SPEC | EXCLUDED_TIMESTAMPS | EXCLUDED_PROPOSED
 CONTENT_KEYS = frozenset({
     "caseRecord", "customFields", "items", "tot", "overheadPct", "quoteNo", "quoteDate", "locationId",
     "settlement", "taxBasis", "historical", "altPicks", "altTexts",
+    "salesPerson", "salesPersonUsername", "salesPhone",   # 2026-11-17 解鎖編輯改報價人：伺服器依帳號重帶（_resolve_unlock_quoter）；報價人是簽核人要審視的內容，維持從嚴算內容（行為與未歸類時相同）
 })
 #: K 審（§I4）裁定**維持從嚴算內容**：`rejection` 只在離開簽核範圍時寫；`dealTag` 先這樣，等影子模式（§H6-1④）一週的
 #: 「來源區塊」統計，若佔比高再改列排除（改清單要同步改 `content_fp.EXCLUDED_KEYS` 與本檔）

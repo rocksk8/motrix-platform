@@ -2526,6 +2526,45 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     return {"quote_no": qno, "created_at": now, "quote_date": q["quoteDate"], "status": "已送出", "dealTag": "已成案"}
 
 
+def _resolve_unlock_quoter(q: dict, old_dj: dict, old_name: str):
+    """解鎖編輯的報價人以伺服器為準（顯示名／電話都不採用用戶端的值；信箱由後面的 enforce_sales_email 依所選人三層解析驗證）。
+    回 None＝報價人沒換（快照欄位還原成已存值，不被用戶端或使用者改名影響）；否則回 {from, fromUsername, to, toUsername}。
+    要換人：必須帶 salesPersonUsername 且是在職使用者，否則 400（不靜默略過）。"""
+    old_name = (old_name or "").strip()
+    old_un = str(old_dj.get("salesPersonUsername") or "").strip()
+    new_un = str(q.get("salesPersonUsername") or "").strip()
+    row = None
+    if new_un:
+        _c = get_db()
+        try:
+            row = _c.execute("SELECT username, display_name, phone FROM users WHERE username=? AND active=1", (new_un,)).fetchone()
+        finally:
+            _c.close()
+    if row:
+        new_name = (row["display_name"] or row["username"] or "").strip()
+        changed = (new_un != old_un) if old_un else (new_name != old_name)
+    elif new_un and new_un == old_un:
+        changed = False                                   # 原報價人後來停用：沒有要換人，維持原樣
+    elif new_un:
+        raise HTTPException(400, "找不到這位報價人（帳號不存在或已停用）", headers=_FAIL_HDR("quoter_invalid"))
+    else:
+        if str(q.get("salesPerson") or "").strip() != old_name:
+            raise HTTPException(400, "請從清單選擇報價人", headers=_FAIL_HDR("quoter_invalid"))
+        changed = False
+    if not changed:
+        q["salesPerson"] = old_name
+        for _k in ("salesPersonUsername", "salesPhone"):
+            if _k in old_dj:
+                q[_k] = old_dj[_k]
+            else:
+                q.pop(_k, None)
+        return None
+    q["salesPerson"] = new_name
+    q["salesPersonUsername"] = new_un
+    q["salesPhone"] = row["phone"] or ""
+    return {"from": old_name, "fromUsername": old_un, "to": new_name, "toUsername": new_un}
+
+
 @router.put("/api/quotations/{quote_no}")
 def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -2568,6 +2607,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
 
     # ── Unlock-edit → append history + force approval flow ────────────────────
     edit_rev = None
+    _quoter_change = None
     if is_unlock_edit:
         editor = _require_user(authorization)
         if editor["role"] != "superadmin":
@@ -2577,6 +2617,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _old_dj = json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}
         except (TypeError, ValueError):
             _old_dj = {}
+        # 報價人：伺服器以帳號重新查顯示名／電話（信箱在寫入交易內由 enforce_sales_email 驗證）；換人要留痕、進簽核理由
+        _quoter_change = _resolve_unlock_quoter(q, _old_dj, _old_dj.get("salesPerson") or "") if _oh_row else None
         _h0 = _old_dj.get("editHistory")
         edit_rev = (len(_h0) if isinstance(_h0, list) else 0) + 1
         # 送審人維持原送審人（使用者裁示）：最高管理者解鎖改內容，不會變成「送審人」——否則原送審人看到的是「他人送審」、不能收回，
@@ -2606,6 +2648,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             "status":             "pending",
             "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"],
         }
+        if _quoter_change:
+            _qc_disp = editor["display_name"] or editor["username"]
+            q["approval"]["reasons"].append(f"報價人變更：{_quoter_change['from'] or '（空）'} → {_quoter_change['to']}（由 {_qc_disp} 修改）")
+            q["approval"]["quoterChange"] = dict(_quoter_change)
 
     # R2（營業稅法 §7、§8）：零稅率／免稅送出（非草稿）要有依據；應稅單移除殘留依據
     validate_tax_basis(q, new_status)
@@ -2705,10 +2751,27 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _unlock_info["cleared"] = [{"tier": c["tier"], "username": c["username"]} for c in _unlock_cleared]
             _hist = q.get("editHistory") if isinstance(q.get("editHistory"), list) else []
             edit_rev = len(_hist) + 1
-            _hist.append({"rev": edit_rev, "at": now, "by": user["username"],
-                          "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit",
-                          "originalRequester": _unlock_info["originalRequester"],          # 送審人維持原送審人；誰改的看 by
-                          "clearedSigners": _unlock_info["cleared"]})                      # 這次被清掉的已簽層（層號＋帳號）
+            try:
+                _old_email = str((json.loads(existing["data_json"] or "{}") or {}).get("salesEmail") or "")
+            except (TypeError, ValueError):
+                _old_email = ""
+            _new_email = str(q.get("salesEmail") or "")
+            # 業績歸屬／列級可見度（sales_person_id）：換人 ⇒ 以帳號取 id（顯示名可能重複，不可用上面依顯示名查到的）；沒換人 ⇒ 維持已存值（原報價人停用時也不被洗成 NULL）
+            if _quoter_change:
+                _sp_r = conn.execute("SELECT id FROM users WHERE username=?", (_quoter_change["toUsername"],)).fetchone()
+                sp_id = _sp_r["id"] if _sp_r else None
+            else:
+                sp_id = existing["sales_person_id"]
+            if _quoter_change or _old_email != _new_email:                              # 報價人（或其信箱）被改：舊→新、操作者（by）都留在紀錄裡
+                _quoter_change = dict(_quoter_change or {})
+                _quoter_change.update({"fromEmail": _old_email, "toEmail": _new_email})
+            _hist_row = {"rev": edit_rev, "at": now, "by": user["username"],
+                         "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit",
+                         "originalRequester": _unlock_info["originalRequester"],          # 送審人維持原送審人；誰改的看 by
+                         "clearedSigners": _unlock_info["cleared"]}                       # 這次被清掉的已簽層（層號＋帳號）
+            if _quoter_change:
+                _hist_row["quoterChange"] = _quoter_change
+            _hist.append(_hist_row)
             q["editHistory"] = _hist
         try:
             require_case(user, existing, quote_no)
@@ -2894,7 +2957,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,
                f"{quote_no}（{q.get('customerName','')}）",
                {"rev": edit_rev, "pendingApproval": True, "editedBy": user["username"],
-                "originalRequester": _unlock_info["originalRequester"], "clearedSigners": _unlock_info["cleared"]})
+                "originalRequester": _unlock_info["originalRequester"], "clearedSigners": _unlock_info["cleared"],
+                **({"quoterChange": _quoter_change} if _quoter_change else {})})
         # 已簽過、被清掉的人要知道內容被改了（站內＋信件＋LINE；預設只發給本人；附帶動作，失敗只記 log）
         spawn_bg_thread(_QEN.fire, args=(quote_no, q.get("customerName") or "", _unlock_cleared),
                         kwargs={"editor": user["username"], "editor_display": user.get("display_name") or user["username"],
