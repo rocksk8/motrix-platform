@@ -223,7 +223,7 @@ def test_old_case_without_new_keys_has_no_new_rows(client):
 def test_settlement_page_warns_on_untaxed_manual_items_without_changing_calculation():
     from core import source_tree
     html = source_tree.page_file("settlement.html").read_text(encoding="utf-8")
-    tag = re.search(r"<div[^>]*stl-taxbasis-warn-[^>]*>(?P<body>.*?)</div>", html, re.S)               # 提示元件本身（以 testid 前綴辨識，不靠位置）
+    tag = re.search(r"<div[^>]*stl-taxbasis-warn-[^>]*>(?P<body>.*?)</div>", html, re.S)               # 提示元件本身（以 testid 前綴辨識，不靠位置）
     assert tag, "精算頁少了稅基提醒元件（data-testid stl-taxbasis-warn-）"
     block = tag.group(0)
     assert "item.actualCostTaxMode === 'pretax' || item.actualCostTaxMode === 'taxed'" in block
