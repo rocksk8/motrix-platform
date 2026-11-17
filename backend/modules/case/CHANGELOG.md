@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-17（feat/quote-quoter-edit-superadmin；解鎖編輯改報價人由伺服器重帶並留舊→新紀錄；版號由列車取）
+- 修正／補強（權限不變：解鎖編輯仍只有最高管理者；已送出／已成案解鎖時仍可改報價人，使用者 2026-11-17 裁示「維持可改、只補紀錄」；草稿的一般 PUT 不動）：`quotations.py::update_quotation` 的解鎖編輯路徑新增 `_resolve_unlock_quoter()`——報價人以 `salesPersonUsername` 為準，伺服器重查顯示名與電話（不採用用戶端送的名稱／電話；信箱沿用 `enforce_sales_email` 三層解析驗證）；換人時 `sales_person_id` 依帳號取（顯示名重複也不會歸錯人）、沒換人維持已存值；沒換人時報價人快照欄位維持已存值；要換人但帳號不存在／已停用、或只改名不帶帳號 ⇒ 400（不靜默略過）。
+- 稽核（舊→新、操作者）：寫進 `quotation.unlock_edit` 稽核細節 `quoterChange`、`editHistory` 該筆的 `quoterChange`（含信箱舊→新）、簽核理由 `approval.reasons`（「報價人變更：A → B（由 X 修改）」，簽核佇列與表單都顯示）與 `approval.quoterChange`。
+- 測試：`tests/test_unlock_edit_quoter_change_2026_11_17.py`；`modules/case/tests/test_content_fp_write_paths_s0_2026_11_06.py` 的分類表補 `salesPerson`／`salesPersonUsername`／`salesPhone` 為內容鍵（行為與未歸類時相同）。
+
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 - 修正（只影響自訂報表選項，旗標後；h11 審查）：`report_source` 的狀態／成交標記／精算狀態選項改為只列呼叫者看得到的列的值、只讀實體欄位（不碰 `data_json`）、每人快取 60 秒；沒有使用者回空。

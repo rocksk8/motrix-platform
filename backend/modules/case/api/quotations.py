@@ -2756,7 +2756,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             except (TypeError, ValueError):
                 _old_email = ""
             _new_email = str(q.get("salesEmail") or "")
-            if _quoter_change or _old_email != _new_email:                                # 報價人（或其信箱）被改：舊→新、操作者（by）都留在紀錄裡
+            # 業績歸屬／列級可見度（sales_person_id）：換人 ⇒ 以帳號取 id（顯示名可能重複，不可用上面依顯示名查到的）；沒換人 ⇒ 維持已存值（原報價人停用時也不被洗成 NULL）
+            if _quoter_change:
+                _sp_r = conn.execute("SELECT id FROM users WHERE username=?", (_quoter_change["toUsername"],)).fetchone()
+                sp_id = _sp_r["id"] if _sp_r else None
+            else:
+                sp_id = existing["sales_person_id"]
+            if _quoter_change or _old_email != _new_email:                              # 報價人（或其信箱）被改：舊→新、操作者（by）都留在紀錄裡
                 _quoter_change = dict(_quoter_change or {})
                 _quoter_change.update({"fromEmail": _old_email, "toEmail": _new_email})
             _hist_row = {"rev": edit_rev, "at": now, "by": user["username"],

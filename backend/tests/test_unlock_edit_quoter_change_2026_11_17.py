@@ -168,3 +168,56 @@ def test_non_superadmin_unlock_is_still_403(client, world):
     assert r.status_code == 403, r.text
     d, st, sp_col, _ = _state()
     assert st == "簽核中" and sp_col == "原業務甲" and d["salesPersonUsername"] == "qc_old"
+
+
+def _uids():
+    from db import get_db
+    c = get_db()
+    try:
+        return {r["username"]: r["id"] for r in c.execute("SELECT id, username FROM users")}
+    finally:
+        c.close()
+
+
+def test_sales_person_id_follows_the_new_quoter_even_with_duplicate_display_name(client, world):
+    """業績歸屬／列級可見度看 sales_person_id：換人要依帳號取 id；兩個在職使用者顯示名相同時不可歸錯人。"""
+    from db import get_db
+    c = get_db()
+    try:
+        c.execute("UPDATE users SET display_name='新業務乙' WHERE username='qc_a1'")        # qc_a1 的 id 比 qc_new 小，依顯示名查會先命中它
+        c.commit()
+    finally:
+        c.close()
+    _seed()
+    r = _put(client, world["sa"], salesPerson="新業務乙", salesPersonUsername="qc_new", salesEmail="new@corp.example")
+    assert r.status_code == 200, r.text
+    ids = _uids()
+    assert ids["qc_a1"] < ids["qc_new"]
+    assert _state()[3] == ids["qc_new"], "sales_person_id 要是新報價人（qc_new）的，不是同顯示名的 qc_a1"
+
+
+def test_unchanged_quoter_keeps_stored_sales_person_id_even_if_original_quoter_is_now_inactive(client, world):
+    from db import get_db
+    _seed()
+    ids = _uids()
+    c = get_db()
+    try:
+        c.execute("UPDATE quotations SET sales_person_id=? WHERE quote_no=?", (ids["qc_old"], NO))
+        c.execute("UPDATE users SET active=0 WHERE username='qc_old'")
+        c.commit()
+    finally:
+        c.close()
+    r = _put(client, world["sa"])                                                       # 沒換人
+    assert r.status_code == 200, r.text
+    assert _state()[3] == ids["qc_old"], "沒換人時維持已存的 sales_person_id（原報價人停用也不洗成 NULL）"
+
+
+def test_approval_queue_shows_the_quoter_change_reason(client, world):
+    _seed()
+    r = _put(client, world["sa"], salesPerson="新業務乙", salesPersonUsername="qc_new", salesEmail="new@corp.example")
+    assert r.status_code == 200, r.text
+    h = _login(client, *world["users"]["qc_a1"])
+    q = client.get("/api/approval-queue", headers=h)
+    assert q.status_code == 200, q.text
+    items = [i for g in q.json()["queue"] for i in g["items"] if i.get("quoteNo") == NO]
+    assert items and any("報價人變更：原業務甲 → 新業務乙" in s for s in items[0]["reasons"]), items
