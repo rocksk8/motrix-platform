@@ -93,7 +93,7 @@ EXCLUDED_PROPOSED = frozenset({
     "docType",                 # 估價單（2026-11-13）：單據類型，讀取時由資料庫欄位注入、開立後不可改（同 status）；待 K 審
 })
 #: 請求暫存欄位：寫入前 `q.pop(...)`，不會進 data_json；列在這裡只是讓掃描器的歸類表完整
-TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit"})
+TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit", "_specChanges"})
 EXCLUDED_KEYS = EXCLUDED_SPEC | EXCLUDED_TIMESTAMPS | EXCLUDED_PROPOSED
 
 #: 伺服器會寫、且**判定為內容**的頂層鍵（排除清單之外的一律如此；這裡只是明示歸類）

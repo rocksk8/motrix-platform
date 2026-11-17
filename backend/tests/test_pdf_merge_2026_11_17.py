@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""helpers/pdf_merge.py：規格 PDF 併入的純函式單元測試（備註事項 B；四條不變式見該檔檔頭）。"""
+"""modules/case/pdf_merge.py：規格 PDF 併入的純函式單元測試（備註事項 B；四條不變式見該檔檔頭）。"""
 import io
 import os
 
 import pypdf
 import pytest
 
-from helpers import pdf_merge as PM
+from modules.case import pdf_merge as PM
 
 
 def _pdf(pages: int, text_marker: bool = False) -> bytes:

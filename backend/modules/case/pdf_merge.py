@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """PDF 併檔（報價單／估價單的規格文件併入；設計 docs/platform/plans/QUOTE-EXTRA-NOTES-DESIGN.md §4）。
 
-本檔是 L1 純函式：**不碰資料庫、不碰 HTTP、不認得報價單**。呼叫端（`modules/case/api/quotation_specs.py`）把要併的檔案
+本檔是純函式（**放在 case 模組內、不是 L1 helper**：只有 case 用，登記成 L1 要升核心 minor 版；下次升核心版時評估收斂為 L1）：**不碰資料庫、不碰 HTTP、不認得報價單**。呼叫端（`modules/case/api/quotation_specs.py`）把要併的檔案
 （id／檔名／絕對路徑）交進來，這裡只負責「本體＋附件 ⇒ 一份 PDF」與「哪些檔併不進去、為什麼」。
 
 ## 固定的「略過原因」詞彙（`SKIP_REASONS`；畫面與稽核都用這幾個字串，不接受別的）

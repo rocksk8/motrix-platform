@@ -151,7 +151,8 @@ def _read(conn, source_type, doc_no):
     if source_type == "quotation_spec":
         # `spec_files_json` 的欄位是 name（設計規格）；附件目錄／預覽用 filename／mime ⇒ 對外補上（不改庫內的值）
         return [dict(f, filename=f.get("name") or "", mime="application/pdf")
-                for f in files_from_json_column(conn, "quotations", "quote_no", doc_no, "spec_files_json") if isinstance(f, dict)]
+                for f in files_from_json_column(conn, "quotations", "quote_no", doc_no, "spec_files_json")
+                if isinstance(f, dict) and not f.get("staged")]       # 解鎖編輯的暫存項還沒生效：不進檔案中心
     if source_type == "case_update":
         out = []
         for row in conn.execute("SELECT files_json FROM case_updates WHERE quote_no = ?", (doc_no,)):

@@ -255,7 +255,7 @@ def test_deleting_the_last_selected_file_removes_the_merge_key(client, world):
     fid = j["specFiles"][0]["id"]
     _set_merge([fid])
     r = client.delete("/api/quotations/%s/spec-files/%s" % (Q, fid), headers=world["sp_owner"])
-    assert r.json() == {"specFiles": [], "mergeFiles": []}
+    assert r.json() == {"specFiles": [], "staged": [], "mergeFiles": []}
     assert "mergeFiles" not in _data()                                             # 沒選＝不存這個鍵（不是空陣列）
 
 
@@ -356,7 +356,7 @@ def test_merge_for_download_merges_in_merge_files_order_and_reports_skips(client
 def test_merge_for_download_never_opens_non_ok_status_files(client, world, monkeypatch):
     j = _up(client, world["sp_owner"], [("e.pdf", _pdf(1, encrypt=True))]).json()
     _set_merge([j["specFiles"][0]["id"]])
-    import helpers.pdf_merge as PM
+    import modules.case.pdf_merge as PM
 
     def _no(*a, **k):
         raise AssertionError("不該再去開狀態非 ok 的檔")
@@ -405,7 +405,7 @@ def test_pdf_download_survives_unexpected_merge_error(client, world, monkeypatch
     monkeypatch.setattr(QA, "generate_pdf_bytes", lambda no, internal=False: _pdf(1))
     fid = _up(client, world["sp_owner"], [("a.pdf", _pdf(2))]).json()["specFiles"][0]["id"]
     _set_merge([fid])
-    import helpers.pdf_merge as PM
+    import modules.case.pdf_merge as PM
     monkeypatch.setattr(PM, "merge_pdf_bytes", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bug")))
     r = client.get("/api/quotations/%s/pdf-download" % Q, headers=world["sp_owner"])
     assert r.status_code == 200 and _npages(r.content) == 1
@@ -452,7 +452,7 @@ def test_archived_merge_failure_leaves_original_file_and_still_records_version(c
     _set_merge([fid])
     pdf = tmp_path / "x.pdf"
     pdf.write_bytes(_pdf(1))
-    import helpers.pdf_merge as PM
+    import modules.case.pdf_merge as PM
     monkeypatch.setattr(PM, "merge_pdf_bytes", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bug")))
     pdf_gen._record_doc_version(Q, "建立", "某人", str(pdf))
     assert _npages(pdf.read_bytes()) == 1 and len(_data()["docVersions"]) == 1

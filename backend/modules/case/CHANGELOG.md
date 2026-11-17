@@ -10,7 +10,8 @@
 - 新增（API）：`POST /api/quotations/{no}/spec-files`（多檔、僅 PDF；單檔不合格列在 `rejected`、不拖垮整批；上限 10 檔／單檔 20MB／合計 50MB）、`DELETE /api/quotations/{no}/spec-files/{id}`（刪檔＋清單＋`data_json.mergeFiles` 同一個寫交易，commit 之後才刪實體檔）。狀態鎖同 PUT 報價單（待審核／簽核中／已送出／已成案／已結案／已拒絕一律 403）；不動 `updated_at`。
 - 新增（輸出）：`GET /api/quotations/{no}` 多頂層 `specFiles`（不含路徑）；`pdf-download` 與背景存檔版 PDF 依 `data_json.mergeFiles` 把規格 PDF 併在本體之後（加密／壞檔／零頁／檔案遺失／超頁（300）／超量（50MB）略過、本體永遠保留、略過原因**不印進 PDF**——下載端點放 `X-Pdf-Merge-Skipped` 標頭，版本紀錄放 `docVersions[].mergeSkipped`）；沒選＝輸出逐位元不變。
 - 附件目錄：新來源類型 `quotation_spec`（資料夾 `uploads/quotation_specs/`，讀取規則同案件頁可讀）；回收筒快照／還原認得 `spec_files_json`。
-- 內部：`helpers/pdf_merge.py`（純 L1 併檔）；`case.doc_version` 提供者改指 `quotation_specs.record_doc_version_with_merge`（先併檔、再呼叫原 `_record_doc_version`）。
+- 內部：`modules/case/pdf_merge.py`（純函式併檔；放在 case 模組內不升核心，**下次升核心版時評估收斂為 L1**；`docs/platform/modules.json` 已登記 `mod:case/pdf_merge`、`mod:case/api/quotation_specs`）；`case.doc_version` 提供者改指 `quotation_specs.record_doc_version_with_merge`（先併檔、再呼叫原 `_record_doc_version`）。
+- 新增（解鎖編輯期間可上傳／刪除規格檔，使用者裁示 2026-11-17）：鎖定狀態（待審核／簽核中／已送出／已成案／已結案）下，**最高管理者且有解鎖驗證證明**（`verify-unlock` 寫的 `quotation.unlock` 稽核列，本人＋本單＋12 小時內；PUT 本身只驗身分，規格檔多這一道）才能傳＝**暫存**（`spec_files_json` 項目帶 `staged:{by,at}`，不進清單／檔案中心／合併／mergeFiles）；已生效的檔在解鎖中不能由 DELETE 刪（403，畫面標待刪）。`PUT /api/quotations/{no}` 的 `data._specChanges={add:[暫存id],remove:[id]}`（只收 `_isUnlockEdit`＋最高管理者，否則 400；不存進 data_json）在**同一個寫入交易**套用：暫存轉正、待刪移除、本人其餘暫存丟掉，實體檔 commit 之後才刪；套用後 ≤10 檔／≤50MB，`mergeFiles` 以套用後清單驗證；寫入 editHistory（解鎖那筆的 `changes`＝`規格文件`）與稽核 `quotation.apply_spec_changes`。新端點 `POST /api/quotations/{no}/spec-files/discard-staged`（放棄修改：清本人暫存，冪等；不需解鎖證明）；暫存 24 小時後由下一次碰規格端點的人懶清掃。上傳／刪除回應多 `staged`（本人暫存清單）。稽核：`quotation.stage_spec_files`／`quotation.discard_spec_files`／`quotation.apply_spec_changes`。
 - 前端：無（由 h15 接）。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）

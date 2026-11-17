@@ -246,6 +246,21 @@
    "class": "guarded",
    "note": "規格 PDF 刪除時把該 id 從 data_json.mergeFiles 拿掉（走漏斗、維持 updated_at）；只在 EDIT_LOCKED_STATUSES 以外的可編輯狀態才會執行，已回簽擇一單必為已送出／已成案 ⇒ 403 擋在前面"
   },
+  "modules/case/api/quotation_specs.py::apply_spec_changes::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": "解鎖編輯存檔時套用規格文件變更（備註事項 B）：只寫 spec_files_json，在 PUT 報價單解鎖存檔的同一個寫入交易內（PUT 自己的 guard_update／擇一單鎖照舊先走）；需最高管理者＋解鎖驗證證明"
+  },
+  "modules/case/api/quotation_specs.py::discard_staged_spec_files::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": "放棄解鎖編輯：只清本人暫存項（spec_files_json）；不碰已生效的檔與本文欄位"
+  },
+  "modules/case/api/quotation_specs.py::sweep_stale_staged::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": "懶清掃：只清過期（24 小時）的暫存項（spec_files_json）；不碰已生效的檔與本文欄位"
+  },
   "modules/case/api/quotations.py::delete_quotation_signed_file::helper:signed_files_json[updated_at]": {
    "count": 1,
    "class": "not-body",
