@@ -55,7 +55,7 @@ def test_second_save_with_returned_updated_at_is_not_a_conflict(case):
     assert r2.status_code == 200, "第二次存檔誤報衝突：%s" % r2.text[:200]
 
 
-def test_each_settlement_409_carries_its_own_fail_reason_code(case):
+def test_each_settlement_409_carries_its_own_fail_reason_code(case, client):
     """稽核只記狀態碼時三種 409 都是 conflict，查不出正式機那兩筆是哪一種；現在各帶固定詞彙原因碼（本文與狀態碼不變）。"""
     c, h = case
     g = c.get(URL, headers=h).json()
@@ -99,7 +99,7 @@ def test_finalize_right_after_draft_save_is_not_a_conflict(case):
     assert r2.status_code == 200, "草稿存完立刻完結被擋：%s" % r2.text[:300]
 
 
-def test_stale_version_audit_msg_keeps_db_value_even_with_overlong_client_value(case):
+def test_stale_version_audit_msg_keeps_db_value_even_with_overlong_client_value(case, client):
     """稽核 msg 上限 120 字：資料庫現值放前面、頁面帶的值截斷 ⇒ 超長輸入不會把現值擠掉。"""
     c, h = case
     cur = _db_updated_at()
