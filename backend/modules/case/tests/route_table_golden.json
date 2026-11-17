@@ -879,6 +879,8 @@
 ["GET", "/api/settings/pdf-base-path", "get_pdf_base_path_setting_api_settings_pdf_base_path_get", [["header", "authorization", false]], [], []]
 ["PATCH", "/api/settings/pdf-base-path", "set_pdf_base_path_setting_api_settings_pdf_base_path_patch", [["header", "authorization", false]], [["application/json", ""]], []]
 ["GET", "/api/settings/pii-archive-status", "get_pii_archive_status_api_settings_pii_archive_status_get", [["header", "authorization", false]], [], []]
+["GET", "/api/settings/quote-notes-templates", "get_quote_notes_templates_api_settings_quote_notes_templates_get", [["header", "authorization", false]], [], []]
+["PUT", "/api/settings/quote-notes-templates", "set_quote_notes_templates_api_settings_quote_notes_templates_put", [["header", "authorization", false]], [["application/json", "#/components/schemas/QuoteNotesTemplatesBody"]], []]
 ["GET", "/api/settings/quote-terms-defaults", "get_quote_terms_defaults_api_settings_quote_terms_defaults_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/settings/quote-terms-presets", "get_quote_terms_presets_api_settings_quote_terms_presets_get", [["header", "authorization", false]], [], []]
 ["PUT", "/api/settings/quote-terms-presets", "set_quote_terms_presets_api_settings_quote_terms_presets_put", [["header", "authorization", false]], [["application/json", "#/components/schemas/QuoteTermsPresetsBody"]], []]

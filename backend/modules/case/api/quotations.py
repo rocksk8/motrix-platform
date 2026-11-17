@@ -143,6 +143,7 @@ _TRACKED_QUOTE_FIELDS = [
     ("tot.netMarginPct",  "營業利益率"),   # 第 48 班改名（舊紀錄存的是「淨利率」；financial_mask.HISTORY_MONEY_FIELDS 新舊並列）
     ("overheadPct",       "管銷分攤比率"),
     ("notes",             "備註"),
+    ("extraNotes",        "備註事項"),          # 報價單／估價單最後一頁的備註事項（2026-11-17）；顯示成字數，不截斷內文
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
     ("contract.contactPerson",   "聯絡人"),
@@ -179,6 +180,15 @@ def _fmt_change_value(v) -> str:
     return text if len(text) <= 60 else text[:57] + "…"
 
 
+#: 簽核佇列詳情可以原樣顯示的變更摘要欄位名（非財務；會印給客戶看的內容）
+_APPROVER_VISIBLE_CHANGE_FIELDS = ("備註事項", "併入輸出的規格文件")
+
+
+def _fmt_notes_size(v) -> str:
+    """備註事項在變更註記裡的寫法：「N 字」；沒填＝「（空白）」。"""
+    return f"{len(v)} 字" if isinstance(v, str) and v.strip() else "（空白）"
+
+
 def _summarize_quote_changes(old: dict, new: dict) -> list:
     """回傳 [{field, from, to}]；沒有任何可辨識的變更時回傳 []。
 
@@ -190,6 +200,9 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
     for path, label in _TRACKED_QUOTE_FIELDS:
         o, n = _dig(old, path), _dig(new, path)
         if o == n:
+            continue
+        if path == "extraNotes":            # 長文：顯示字數（截 60 字沒有資訊量）；改了什麼內容看 PDF 版本存檔
+            changes.append({"field": label, "from": _fmt_notes_size(o), "to": _fmt_notes_size(n)})
             continue
         changes.append({"field": label,
                         "from": _fmt_change_value(o),
@@ -1977,6 +1990,23 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     return {"ok": True}
 
 
+#: 備註事項字數上限（純文字；與 pdf_gen.EXTRA_NOTES_MAX 同值，那邊是輸出時的最後一道截斷，這裡是存檔時的伺服器強制）
+EXTRA_NOTES_MAX = 20000
+
+
+def _check_extra_notes(q: dict) -> None:
+    """`extraNotes`（備註事項）存檔前檢查：非字串一律當沒填（丟掉鍵）、全空白＝沒填（丟掉鍵，舊單維持沒有這個鍵）、
+    超過上限 ⇒ 400（不靜默截斷：使用者以為印出去的是全文）。內容原樣保留（換行、縮排、「- 」條列），不 strip 中間。"""
+    if "extraNotes" not in q:
+        return
+    v = q.get("extraNotes")
+    if not isinstance(v, str) or not v.strip():
+        q.pop("extraNotes", None)
+        return
+    if len(v) > EXTRA_NOTES_MAX:
+        raise HTTPException(400, f"備註事項過長（{len(v)} 字），上限 {EXTRA_NOTES_MAX} 字")
+
+
 def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
     modules/case/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
@@ -2036,6 +2066,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
     _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
+    _check_extra_notes(q)
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     if body.status == "待審核":
@@ -2451,6 +2482,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["caseRecord"].pop("customFields", None)
     _quote_custom_fields_gate(q, None)
     validate_quote_tax(q)
+    _check_extra_notes(q)
     validate_tax_basis(q, "已送出")
     q.pop("clauseTitles", None)
     _PG.prepare(q, user)                    # 利潤／公益金一律以「今天」的口徑計算（使用者裁示 2026-10-16 #2）
@@ -2540,6 +2572,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
+    _check_extra_notes(q)
     # 第 48 班 S2：管銷分攤比率驗證／權限／戳記——放在最前面：開寫入連線與寄簽核通知『之前』就拒絕（422／403），不留連線也不寄信；
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
@@ -5963,6 +5996,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
     for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
         q.pop(_k, None)
     validate_quote_tax(q)
+    _check_extra_notes(q)
     q["quoteNo"] = quote_no
     conn = get_db()
     try:
@@ -7435,6 +7469,9 @@ def detail_quotation(conn, doc_no):
         "items": d.get("items") or [],
         "files": files,
     }
+    _xn = d.get("extraNotes")
+    if isinstance(_xn, str) and _xn.strip():     # 備註事項（2026-11-17）：會印在送給客戶的 PDF 最後一頁，簽核人要看得到全文；沒填 ⇒ 不加這一列（舊單回應不變）
+        out["fields"].append({"label": "備註事項（印在報價單最後一頁）", "value": _xn})
     # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
     hist = d.get("editHistory") or []
     if isinstance(hist, list) and hist:
@@ -7445,6 +7482,12 @@ def detail_quotation(conn, doc_no):
                       "時間": last.get("at"), "類型": last.get("type")},
             "before": None,
         }
+        # 🔴 只挑備註事項／併入規格文件這兩種：同一筆摘要還有毛利率、營業利益率等財務欄位（financial_mask 會對沒有財務權限的人遮蔽），
+        #    這裡不可以把整包摘要原樣放給所有簽核人。
+        _lc = [c for c in (last.get("changes") or []) if isinstance(c, dict) and c.get("field") in _APPROVER_VISIBLE_CHANGE_FIELDS]
+        if _lc:     # 簽核人看得到「這次備註／附件改了什麼」，不只知道「有人改過」
+            out["changes"]["after"]["變更項目"] = "；".join(
+                "%s：%s → %s" % (c.get("field"), c.get("from") or "（空）", c.get("to") or "（空）") for c in _lc[:12])
     if isinstance(d, dict) and d:
         # 簽核二擇一 S1b：簽核佇列詳情也給內容指紋（簽核人在佇列頁看到內容的那一刻算），核准時當 expectedFp 帶回。
         # 算在原始（未遮蔽）內容上，與 approve 端點讀到的 data_json 同一份；指紋本身不含任何內容

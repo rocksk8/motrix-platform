@@ -2866,6 +2866,112 @@ def set_quote_terms_presets(body: QuoteTermsPresetsBody, authorization: str = He
     return value
 
 
+# ── 備註事項範本（2026-11-17 使用者交辦；設計 docs/platform/plans/QUOTE-EXTRA-NOTES-DESIGN.md §5）──────────────────
+#
+# 報價單／估價單最後一頁的「備註事項」可從範本帶入（AGV、監控系統…）。形狀與條款組同一個模子：
+#   `system_settings.quote_extra_notes_templates = {templates: [{key, name, category, text}]}`
+# 報價單與估價單共用一份。**單據存的是複製過去的文字**（套用後可自由修改，不與範本連動；事後改範本或刪範本不影響已開出的單），
+# `key` 只給畫面辨識。讀取只要求登入（報價人要用）、寫入限最高管理者；整組覆寫（≤100 組）。
+# 範本超過 10 項時前端出現分類篩選與搜尋（見 quotation-form.html）。
+
+_NOTES_TPL_MAX = 100
+_NOTES_TPL_NAME_MAX = 30
+_NOTES_TPL_CATEGORY_MAX = 20
+_NOTES_TPL_TEXT_MAX = 20000          # 與報價單 `extraNotes` 上限同值（套用後一定存得進去）
+
+
+class QuoteNotesTemplate(BaseModel):
+    key:      str = ""
+    name:     str
+    category: str = ""
+    text:     str = ""
+
+
+class QuoteNotesTemplatesBody(BaseModel):
+    templates: List[QuoteNotesTemplate]
+
+
+def _quote_notes_templates() -> dict:
+    """目前範本；沒設定過 ⇒ 空清單（不自動種範本：內容是各公司自己的產品線文字）。"""
+    raw = _get_setting("quote_extra_notes_templates", {}) or {}
+    tpls = raw.get("templates") if isinstance(raw, dict) else None
+    return {"templates": [t for t in (tpls or []) if isinstance(t, dict)]}
+
+
+@router.get("/api/settings/quote-notes-templates")
+def get_quote_notes_templates(authorization: str = Header(None)):
+    """報價人要靠它套用，所以只要求登入（內容是公司自己的備註範本，不是機密）。"""
+    _require_user(authorization)
+    return _quote_notes_templates()
+
+
+@router.put("/api/settings/quote-notes-templates")
+def set_quote_notes_templates(body: QuoteNotesTemplatesBody, authorization: str = Header(None)):
+    """整組覆寫（新增／改名／改內容／刪除／改分類都走這一支），僅最高管理者；與條款組同形的驗證、稽核、變更通知。"""
+    actor = _require_user(authorization, require_superadmin=True)
+    if len(body.templates) > _NOTES_TPL_MAX:
+        raise HTTPException(400, f"備註範本最多 {_NOTES_TPL_MAX} 個")
+    seen_keys, seen_names, cleaned = set(), set(), []
+    for t in body.templates:
+        name = (t.name or "").strip()
+        if not name:
+            raise HTTPException(400, "備註範本名稱不可空白")
+        if len(name) > _NOTES_TPL_NAME_MAX:
+            raise HTTPException(400, f"備註範本名稱過長（{name[:10]}…），上限 {_NOTES_TPL_NAME_MAX} 字")
+        if name in seen_names:
+            raise HTTPException(400, f"備註範本名稱重複：{name}")
+        seen_names.add(name)
+        category = (t.category or "").strip()
+        if len(category) > _NOTES_TPL_CATEGORY_MAX:
+            raise HTTPException(400, f"「{name}」的分類過長，上限 {_NOTES_TPL_CATEGORY_MAX} 字")
+        text = t.text or ""
+        if not text.strip():
+            raise HTTPException(400, f"「{name}」的內容不可空白")
+        if len(text) > _NOTES_TPL_TEXT_MAX:
+            raise HTTPException(400, f"「{name}」的內容過長（上限 {_NOTES_TPL_TEXT_MAX} 字）")
+        key = (t.key or "").strip() or uuid.uuid4().hex[:8]
+        if key in seen_keys:
+            raise HTTPException(400, f"備註範本 key 重複：{key}")
+        seen_keys.add(key)
+        cleaned.append({"key": key, "name": name, "category": category, "text": text})
+    value = {"templates": cleaned}
+    try:
+        old_value = _quote_notes_templates()                        # 寫入前記下目前值，存檔後通知「誰改了什麼」；讀不到不能害儲存失敗
+    except Exception:                                               # noqa: BLE001
+        old_value = None
+        logger.warning("備註事項範本：讀不到舊值，這次儲存不發通知", exc_info=True)
+    _set_setting("quote_extra_notes_templates", value)
+    _audit(_tok(authorization), "settings.quote_notes_templates.update", "settings",
+           "quote_extra_notes_templates", f"備註事項範本共 {len(cleaned)} 個")
+    if old_value is not None:
+        _notify_quote_terms_changed(_quote_notes_templates_change_rows(old_value, value), actor["username"])
+    return value
+
+
+def _quote_notes_templates_change_rows(old, new):
+    """備註範本整組覆寫前後比對（以 key 對應）⇒ 通知列（沿用報價條款的 `quote_terms` 通知事件）：新增／刪除／改名／分類／內容修改。"""
+    olds = {t.get("key"): t for t in (old.get("templates") or []) if isinstance(t, dict)}
+    news = {t.get("key"): t for t in (new.get("templates") or []) if isinstance(t, dict)}
+    q = lambda names: "".join("「%s」" % n for n in names)
+    rows = []
+    added = [news[k].get("name") for k in news if k not in olds]
+    gone = [olds[k].get("name") for k in olds if k not in news]
+    if added:
+        rows.append(("報價備註範本／新增", "（無）", q(added)))
+    if gone:
+        rows.append(("報價備註範本／刪除", q(gone), "（已刪除）"))
+    renamed = [(olds[k].get("name"), news[k].get("name")) for k in news if k in olds and olds[k].get("name") != news[k].get("name")]
+    if renamed:
+        rows.append(("報價備註範本／改名", q([a for a, _ in renamed]), q([b for _, b in renamed])))
+    recat = [news[k].get("name") for k in news if k in olds and (olds[k].get("category") or "") != (news[k].get("category") or "")]
+    if recat:
+        rows.append(("報價備註範本／分類", "（舊分類）", q(recat)))
+    edited = [news[k].get("name") for k in news if k in olds and (olds[k].get("text") or "") != (news[k].get("text") or "")]
+    if edited:
+        rows.append(("報價備註範本／內容修改", "（舊內容）", q(edited)))
+    return rows
+
+
 # ── Cloud backup storage target（2026-09-07，架構地圖 §6.4）────────────────────
 # 選擇備份要寫去哪裡：本機掛載的雲端硬碟磁碟機（預設，沿用 archive.py 既有邏輯，
 # 已知磁碟機代號會漂移）或 S3 相容物件儲存（AWS S3／Backblaze B2 等，見
