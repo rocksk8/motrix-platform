@@ -373,11 +373,11 @@ def test_unlock_edit_upload_is_staged_and_relock_discards_it(live_server, make_u
     row = page.locator("[data-testid=qf-spec-row]").first
     row.wait_for(state="visible", timeout=5000)
     assert row.get_attribute("data-spec-state") == "staged"
-    assert row.locator("[data-testid=qf-spec-staged-badge]").is_visible()
+    row.locator("[data-testid=qf-spec-staged-badge]").wait_for(state="visible", timeout=5000)   # 整合：x-show 比 data-spec-state 晚一個影格，不能立刻 is_visible()
     live, staged, _data = _server_specs(no)
     assert live == [] and len(staged) == 1, "暫存檔不進生效清單"
     page.once("dialog", lambda d: d.accept())
-    page.click('[data-testid="qf-relock"]')
+    page.click('[data-testid="qf-discard-unlock-edit"]')   # 整合（t88-int）：「重新鎖定」改為先儲存再鎖（fix/quote-relock-saves）；捨棄暫存／待刪走「放棄修改」
     page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specStaged.length === 0", timeout=10000)
     assert page.locator("[data-testid=qf-spec-row]").count() == 0
     page.wait_for_timeout(300)
@@ -407,7 +407,8 @@ def test_unlock_edit_save_applies_staged_and_pending_delete(live_server, make_us
     page.locator("[data-testid=qf-spec-delete]").first.click()
     page.wait_for_function(f"() => {ROOT}.specPendingDelete.length === 1", timeout=5000)
     row = page.locator("[data-testid=qf-spec-row]").first
-    assert row.get_attribute("data-spec-state") == "deleting" and row.locator("[data-testid=qf-spec-deleting-badge]").is_visible()
+    assert row.get_attribute("data-spec-state") == "deleting"
+    row.locator("[data-testid=qf-spec-deleting-badge]").wait_for(state="visible", timeout=5000)   # 整合：同上（x-show 晚一個影格）
     assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == [], "待刪的檔不再送勾選"
     assert _server_specs(no)[0], "標待刪不打 API，伺服器上檔案還在"
     row.locator("[data-testid=qf-spec-restore]").click()
@@ -416,7 +417,7 @@ def test_unlock_edit_save_applies_staged_and_pending_delete(live_server, make_us
     page.locator("[data-testid=qf-spec-delete]").first.click()
     page.wait_for_function(f"() => {ROOT}.specPendingDelete.length === 1", timeout=5000)
     page.once("dialog", lambda d: d.accept())
-    page.click('[data-testid="qf-relock"]')
+    page.click('[data-testid="qf-discard-unlock-edit"]')   # 整合（t88-int）：「重新鎖定」改為先儲存再鎖（fix/quote-relock-saves）；捨棄暫存／待刪走「放棄修改」
     page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specPendingDelete.length === 0", timeout=10000)
     assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == [sid], "放棄修改後勾選回到原狀"
     assert page.locator("[data-testid=qf-spec-row]").first.get_attribute("data-spec-state") == "ok"
