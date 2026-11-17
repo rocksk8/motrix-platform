@@ -94,7 +94,7 @@ from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送�
 from helpers.uploads import _effective_subfolder
 from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
-from modules.case.api.quotation_specs import validate_merge_files as _validate_merge_files, merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
+from modules.case.api.quotation_specs import validate_merge_files as _validate_merge_files, merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header, normalize_spec_changes as _norm_spec_changes, spec_files_after as _spec_files_after, apply_spec_changes as _apply_spec_changes   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base, build_quote_preview_html,
@@ -2019,7 +2019,7 @@ def _check_extra_notes(q: dict) -> None:
         raise HTTPException(400, f"備註事項過長（{len(v)} 字），上限 {EXTRA_NOTES_MAX} 字")
 
 
-def _check_merge_files(q: dict, quote_no=None) -> None:
+def _check_merge_files(q: dict, quote_no=None, spec_override=None) -> None:
     """`mergeFiles`（併入輸出的規格文件 id，有序）存檔前檢查：只能引用**這張單自己**的規格檔（新單沒有 ⇒ 一律清空）；
     清理（去重、丟掉已刪／別張單的 id）與格式錯誤的 400 由 `quotation_specs.validate_merge_files` 決定；
     清理後是空的就不存這個鍵（與 extraNotes 同習慣：舊單與沒用這功能的單 data_json 不多任何鍵）。"""
@@ -2029,7 +2029,9 @@ def _check_merge_files(q: dict, quote_no=None) -> None:
         q.pop("mergeFiles", None)
         return
     spec = "[]"
-    if quote_no:
+    if spec_override is not None:                          # 解鎖存檔帶 `_specChanges`：以「套用後」的清單驗證（被標待刪的 id 丟掉、剛暫存要轉正的認得）
+        spec = spec_override
+    elif quote_no:
         _c = get_db()
         try:
             _r = _c.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
@@ -2609,9 +2611,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # consume unlock-edit flag before any processing
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
+    _spec_raw = q.pop("_specChanges", None)                # 解鎖編輯期間對規格文件的暫存動作（上傳／標待刪）；只在這次存檔才生效，不存進 data_json
+    _spec_ch = _norm_spec_changes(_spec_raw)
+    if _spec_ch is not None:
+        if not is_unlock_edit or user["role"] != "superadmin":
+            raise HTTPException(400, "規格文件的變更只能隨解鎖編輯存檔（最高管理者）")
+        _spec_after = _spec_files_after(quote_no, _spec_ch, user)
+    else:
+        _spec_after = None
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
     _check_extra_notes(q)
-    _check_merge_files(q, quote_no)
+    _check_merge_files(q, quote_no, _spec_after)
     # 第 48 班 S2：管銷分攤比率驗證／權限／戳記——放在最前面：開寫入連線與寄簽核通知『之前』就拒絕（422／403），不留連線也不寄信；
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
@@ -2727,6 +2737,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
 
     tot = q.get("tot", {})
 
+    _spec_apply = None
     conn = get_db()
     try:                                 # 任何例外都不可帶著寫鎖漏出連線（先前沒有 finally；各早退路徑自己 close 的照舊）
 
@@ -2782,6 +2793,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                           "originalRequester": _unlock_info["originalRequester"],          # 送審人維持原送審人；誰改的看 by
                           "clearedSigners": _unlock_info["cleared"]})                      # 這次被清掉的已簽層（層號＋帳號）
             q["editHistory"] = _hist
+            if _spec_ch is not None:                      # 規格文件：同一個寫交易套用（暫存轉正、待刪移除）；實體檔 commit 之後才刪
+                _spec_apply = _apply_spec_changes(conn, quote_no, _spec_ch, user, now)
+                if _spec_apply:
+                    if _spec_apply["changes"]:
+                        _hist[-1]["changes"] = _spec_apply["changes"]
+                    if "mergeFiles" in q:                 # 寫鎖內重算後再清一次（極罕見：兩次讀之間有人刪了檔）
+                        _ids = _validate_merge_files(q.get("mergeFiles"), _spec_apply["after"])
+                        if _ids:
+                            q["mergeFiles"] = _ids
+                        else:
+                            q.pop("mergeFiles", None)
         try:
             require_case(user, existing, quote_no)
         except HTTPException:
@@ -2961,6 +2983,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             pass
         raise
     conn.close()
+    if _spec_apply:
+        for _f in _spec_apply["unlink"]:                 # commit 之後才刪實體檔（失敗＝留下孤兒檔、不影響資料）
+            _uploads_mod.remove_physical_file(_f)
+        if _spec_apply["changes"]:
+            _audit(_tok(authorization), 'quotation.apply_spec_changes', 'quotation', quote_no,
+                   f"{quote_no}（解鎖存檔套用規格文件變更：{_spec_apply['changes'][0]['to']}）", _spec_apply["detail"])
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,

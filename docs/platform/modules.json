@@ -523,7 +523,7 @@
     "mod:case/api/dashboard_groups",
     "mod:case/api/quotation_stages",
     "mod:case/api/quotation_specs",
-    "helper:pdf_merge",
+    "mod:case/pdf_merge",
     "mod:case/api/material_links",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",

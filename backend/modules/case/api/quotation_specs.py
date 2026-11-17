@@ -21,15 +21,16 @@
 import json
 import logging
 import os
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 
 from db import get_db
 from helpers import _audit, _require_user, _tok
-from helpers import pdf_merge as _pm
+from modules.case import pdf_merge as _pm
 from helpers import uploads as _up
 from helpers.uploads import append_json_list, files_txn, remove_physical_file, save_document_files
 
@@ -46,20 +47,57 @@ MAX_MERGE_TOTAL_MB = _pm.DEFAULT_MAX_TOTAL_MB
 #: `tests/test_quote_spec_files_2026_11_17.py` 逐字比對原始碼，兩邊不一致就轉紅）。
 EDIT_LOCKED_STATUSES = ("待審核", "簽核中", "已送出", "已成案", "已結案")
 
+STAGE_TTL_HOURS = 24                      # 解鎖編輯暫存檔的壽命：超過就由下一次碰規格端點的人懶清掃（沒收尾＝瀏覽器直接關掉的殘檔）
+UNLOCK_PROOF_HOURS = 12                   # 「解鎖驗證證明」（audit_log 的 quotation.unlock）有效幾小時
+_SWEEP = {"at": 0.0}                      # 懶清掃的節流（行程內單調時鐘；測試可歸零）
+_SWEEP_EVERY_SECONDS = 300
+
 #: 上傳被擋的原因代碼（`rejected[].reason`；`message` 是給人看的一句話）
 REJECT_REASONS = ("not_pdf", "empty", "too_large", "too_many", "over_total", "invalid")
 
 
 # ── 純函式 ────────────────────────────────────────────────────────────────────
 
-def load_spec_files(raw) -> list:
-    """`spec_files_json`（字串或已解析）⇒ list[dict]；壞資料 ⇒ []（不丟例外：讀取端不可以因為一欄壞掉整張單打不開）。"""
+def _load_all(raw) -> list:
+    """`spec_files_json`（字串或已解析）⇒ list[dict]（**含**解鎖編輯的暫存項）；壞資料 ⇒ []（不丟例外：讀取端不可以因為一欄壞掉整張單打不開）。"""
     if isinstance(raw, str):
         try:
             raw = json.loads(raw) if raw else []
         except ValueError:
             return []
     return [f for f in raw if isinstance(f, dict) and f.get("id")] if isinstance(raw, list) else []
+
+
+def load_spec_files(raw) -> list:
+    """**已生效**的規格文件清單（不含解鎖編輯的暫存項）。GET、檔案目錄、合併、mergeFiles 驗證、上限計算全部只看這份——
+    暫存項只有本檔的暫存／套用函式看得到（`_load_all`），所以暫存檔不可能被併進輸出、也不會出現在檔案中心。"""
+    return [f for f in _load_all(raw) if not f.get("staged")]
+
+
+def _staged_by(f: dict):
+    st = f.get("staged")
+    return st.get("by") if isinstance(st, dict) else None
+
+
+def _staged_expired(f: dict, now=None, ttl_hours=STAGE_TTL_HOURS) -> bool:
+    st = f.get("staged")
+    try:
+        at = datetime.fromisoformat(str(st.get("at")))
+    except (AttributeError, TypeError, ValueError):
+        return True                                           # 沒時間戳／壞掉的暫存項 ⇒ 視為過期（會被清掉）
+    if isinstance(now, str):                                  # PUT 傳進來的是 isoformat 字串
+        try:
+            now = datetime.fromisoformat(now)
+        except ValueError:
+            now = None
+    return (now or datetime.now()) - at > timedelta(hours=ttl_hours)
+
+
+def public_staged(raw, username: str) -> list:
+    """給前端：**本人**暫存、尚未過期的檔（不含路徑）。"""
+    return [{"id": f["id"], "name": f.get("name") or "", "size": int(f.get("size") or 0), "pages": int(f.get("pages") or 0),
+             "status": f.get("status") or "ok"}
+            for f in _load_all(raw) if f.get("staged") and _staged_by(f) == username and not _staged_expired(f)]
 
 
 def public_spec_files(raw) -> list:
@@ -115,7 +153,7 @@ def merge_for_download(row, body: bytes):
     - `data_json.mergeFiles` 沒有（或空）⇒ **原樣回 `(body, [])`**（沒用這功能的單，輸出逐位元不變）。
     - 狀態不是 ok 的檔（加密／壞檔／零頁）不開、直接略過（原因＝它的 status）；實體檔不在／路徑不合法 ⇒ missing。
     - 不在清單裡的 id 靜默忽略（與 `validate_merge_files` 同）。
-    - 本體永遠保留；略過的原因只回傳、不印進 PDF（見 `helpers/pdf_merge.py`）。`skipped`＝`[{id, name, reason}]`，依 mergeFiles 順序。"""
+    - 本體永遠保留；略過的原因只回傳、不印進 PDF（見 `modules/case/pdf_merge.py`）。`skipped`＝`[{id, name, reason}]`，依 mergeFiles 順序。"""
     keys = row.keys() if hasattr(row, "keys") else ()
     ids = merge_ids_of(row["data_json"] if "data_json" in keys else None)
     if not ids:
@@ -211,21 +249,169 @@ def record_doc_version_with_merge(quote_no: str, entry: dict, keep: int) -> None
     _Q._record_doc_version(quote_no, entry, keep)
 
 
+# ── 解鎖編輯的暫存／套用 ────────────────────────────────────────────────────────
+
+def normalize_spec_changes(changes):
+    """PUT 的 `data._specChanges = {add:[暫存 id], remove:[id]}` ⇒ 清理後的 dict；沒帶或兩邊都空 ⇒ None；格式錯 ⇒ HTTPException(400)。"""
+    if changes is None:
+        return None
+    if not isinstance(changes, dict):
+        raise HTTPException(400, "_specChanges 必須是 {add:[…], remove:[…]}")
+    out = {}
+    for k in ("add", "remove"):
+        v = changes.get(k)
+        v = [] if v is None else v
+        if not isinstance(v, list) or any(not isinstance(i, str) for i in v):
+            raise HTTPException(400, "_specChanges.%s 必須是檔案 id 的清單" % k)
+        if len(v) > 50:
+            raise HTTPException(400, "_specChanges.%s 太長" % k)
+        out[k] = list(dict.fromkeys(v))
+    if set(out["add"]) & set(out["remove"]):
+        raise HTTPException(400, "同一份規格文件不可同時新增與移除")
+    return out if (out["add"] or out["remove"]) else None
+
+
+def _plan(all_entries: list, changes: dict, username: str, now=None):
+    """套用 `_specChanges` 的計算（純函式）⇒ `(after, promoted, removed_live, dropped)`：
+    after＝套用後已生效清單（保序：原有的去掉 remove，再接上 add 的）；promoted＝轉正的暫存項；removed_live＝被移除的已生效項；
+    dropped＝要清掉的本人暫存項（沒放進 add 的）——**存檔＝這一輪解鎖結束**，本人沒轉正的暫存都不留。
+    add 的 id 必須是本人暫存且未過期，否則 400；remove 的 id 不存在＝忽略（冪等）；套用後超過上限 ⇒ 400。"""
+    live = [f for f in all_entries if not f.get("staged")]
+    mine = {f["id"]: f for f in all_entries if f.get("staged") and _staged_by(f) == username}
+    promoted = []
+    for i in changes["add"]:
+        f = mine.get(i)
+        if f is None or _staged_expired(f, now):
+            raise HTTPException(400, "暫存的規格文件已失效，請重新上傳")
+        promoted.append({k: v for k, v in f.items() if k != "staged"})
+    rm = set(changes["remove"])
+    removed_live = [f for f in live if f["id"] in rm]
+    add_ids = set(changes["add"])
+    dropped = [f for i, f in mine.items() if i not in add_ids]
+    after = [f for f in live if f["id"] not in rm] + promoted
+    if len(after) > MAX_SPEC_FILES:
+        raise HTTPException(400, "每張單最多 %d 份規格文件" % MAX_SPEC_FILES)
+    if sum(int(f.get("size") or 0) for f in after) > MAX_SPEC_TOTAL_BYTES:
+        raise HTTPException(400, "規格文件合計上限 %dMB" % (MAX_SPEC_TOTAL_BYTES // (1024 * 1024)))
+    return after, promoted, removed_live, dropped
+
+
+def spec_files_after(quote_no: str, changes, user: dict) -> list:
+    """（唯讀）套用 `_specChanges` **之後**的已生效規格清單——給存檔前的 `mergeFiles` 驗證用（被移除的 id 自然被 `validate_merge_files` 丟掉，
+    剛暫存要轉正的 id 認得）。沒帶 changes ⇒ 現行已生效清單。格式錯／暫存已失效／超過上限 ⇒ HTTPException(400)。"""
+    ch = normalize_spec_changes(changes)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    finally:
+        conn.close()
+    raw = row["spec_files_json"] if row else "[]"
+    if ch is None:
+        return load_spec_files(raw)
+    return _plan(_load_all(raw), ch, user["username"])[0]
+
+
+def _names(entries, limit=5) -> str:
+    ns = [str(f.get("name") or "")[:40] for f in entries]
+    return "、".join(ns[:limit]) + ("…等 %d 個" % len(ns) if len(ns) > limit else "")
+
+
+def apply_spec_changes(conn, quote_no: str, changes, user: dict, now=None):
+    """**在 PUT 報價單（解鎖編輯）的寫入交易內呼叫**：重讀 `spec_files_json`（寫鎖內）、重算、寫回——
+    移除的項目消失、暫存要轉正的拿掉 staged 旗標、本人其餘暫存項丟掉、別人的暫存項不動。
+    回 `{"unlink": [commit 之後才刪的實體檔 metadata], "changes": [editHistory 用], "detail": {…稽核用}}`；沒有 changes ⇒ None。
+    不自己 commit；任何 HTTPException ⇒ 呼叫端的交易整個 rollback（含本欄）。"""
+    ch = normalize_spec_changes(changes)
+    if ch is None:
+        return None
+    if user.get("role") != "superadmin" or not _unlock_proven(conn, user, quote_no):
+        raise HTTPException(403, "請先按「解鎖編輯」並輸入解鎖密碼，再處理規格文件")
+    row = conn.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "報價單不存在")
+    all_entries = _load_all(row["spec_files_json"])
+    after, promoted, removed_live, dropped = _plan(all_entries, ch, user["username"], now)
+    others = [f for f in all_entries if f.get("staged") and _staged_by(f) != user["username"]]
+    conn.execute("UPDATE quotations SET spec_files_json=? WHERE quote_no=?", (json.dumps(after + others, ensure_ascii=False), quote_no))
+    parts = []
+    if promoted:
+        parts.append("新增 " + _names(promoted))
+    if removed_live:
+        parts.append("刪除 " + _names(removed_live))
+    return {"unlink": removed_live + dropped, "after": after,
+            "changes": [{"field": "規格文件", "from": "", "to": "／".join(parts)}] if parts else [],
+            "detail": {"added": [{"name": f.get("name"), "size": f.get("size")} for f in promoted],
+                       "removed": [{"name": f.get("name"), "size": f.get("size")} for f in removed_live]}}
+
+
+def sweep_stale_staged(now=None, ttl_hours=STAGE_TTL_HOURS) -> int:
+    """清掉所有單據上過期的暫存項（紀錄＋實體檔；實體檔在 commit 之後才刪）。回清掉幾個。不丟例外。"""
+    n = 0
+    try:
+        conn = get_db()
+        try:
+            qs = [r["quote_no"] for r in conn.execute(
+                "SELECT quote_no FROM quotations WHERE spec_files_json LIKE '%\"staged\"%'").fetchall()]
+        finally:
+            conn.close()
+        for qn in qs:
+            gone = []
+            c2 = get_db()
+            try:
+                with files_txn(c2, []):
+                    r = c2.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (qn,)).fetchone()
+                    allf = _load_all(r["spec_files_json"]) if r else []
+                    gone = [f for f in allf if f.get("staged") and _staged_expired(f, now, ttl_hours)]
+                    if gone:
+                        ids = {f["id"] for f in gone}
+                        c2.execute("UPDATE quotations SET spec_files_json=? WHERE quote_no=?",
+                                   (json.dumps([f for f in allf if f["id"] not in ids], ensure_ascii=False), qn))
+            finally:
+                c2.close()
+            for f in gone:
+                remove_physical_file(f)
+            n += len(gone)
+    except Exception:                                              # noqa: BLE001 — 清掃是附帶動作
+        logger.exception("sweep_stale_staged failed")
+    return n
+
+
+def _maybe_sweep() -> None:
+    if time.monotonic() - _SWEEP["at"] >= _SWEEP_EVERY_SECONDS:
+        _SWEEP["at"] = time.monotonic()
+        sweep_stale_staged()
+
+
 # ── 閘門 ──────────────────────────────────────────────────────────────────────
 
-def _quote_edit_gate(row, user=None):
-    """可不可以動這張單的規格文件：**與 PUT 報價單的狀態鎖同一條規則**（`update_quotation`：已拒絕、`EDIT_LOCKED_STATUSES` 一律 403）。
-    ⚠️ 解鎖編輯（最高管理者）進行中，資料庫的狀態仍是原本的鎖定狀態（要存檔才變）⇒ 這段期間也不能上傳／刪檔；要先存檔或另案決定放寬。
-    `row` 需有 `status`。擁有者規則（誰看得到這張單）由呼叫端的 `_guard_case` 負責。"""
+def _unlock_proven(conn, user: dict, quote_no: str) -> bool:
+    """伺服器端的「解鎖驗證證明」：本人在這張單上通過 `POST /api/auth/verify-unlock`（解鎖密碼）時寫的稽核列
+    （action=quotation.unlock、target＝單號），`UNLOCK_PROOF_HOURS` 小時內。
+    ⚠️ 既有的 PUT（`_isUnlockEdit`）只檢查最高管理者身分、不核對密碼證明；規格檔多這一道，才擋得住「直接打 API 上傳到鎖定中的單」。"""
+    since = (datetime.now() - timedelta(hours=UNLOCK_PROOF_HOURS)).isoformat()
+    return conn.execute("SELECT 1 FROM audit_log WHERE action='quotation.unlock' AND target_id=? AND username=? AND at>=? LIMIT 1",
+                        (quote_no, user.get("username") or "", since)).fetchone() is not None
+
+
+def _quote_edit_gate(row, user=None, conn=None, quote_no=None) -> str:
+    """可不可以動這張單的規格文件，回模式：
+    - `"live"`：草稿／已退回等可編輯狀態（規則同 PUT 報價單的狀態鎖）⇒ 立即生效。
+    - `"staged"`：鎖定狀態（`EDIT_LOCKED_STATUSES`）＋最高管理者＋解鎖驗證證明 ⇒ 暫存，等 PUT（解鎖存檔）才生效並重新送簽。
+    其餘（已拒絕、鎖定狀態但不是最高管理者、沒有解鎖證明）⇒ 403。擁有者規則（誰看得到這張單）由呼叫端的 `_guard_case` 負責。"""
     st = row["status"] if row is not None else ""
     if st == "已拒絕":
         raise HTTPException(403, "已駁回結案的報價單不可修改")
-    if st in EDIT_LOCKED_STATUSES:
+    if st not in EDIT_LOCKED_STATUSES:
+        return "live"
+    if user is None or user.get("role") != "superadmin":
         raise HTTPException(403, "報價單狀態為「%s」，請透過正式流程操作或解鎖後修改" % st)
+    if conn is None or not _unlock_proven(conn, user, quote_no or ""):
+        raise HTTPException(403, "請先按「解鎖編輯」並輸入解鎖密碼，再處理規格文件")
+    return "staged"
 
 
-def _response(spec_list, data_json) -> dict:
-    return {"specFiles": public_spec_files(spec_list), "mergeFiles": merge_ids_of(data_json)}
+def _response(spec_raw, data_json, username: str = "") -> dict:
+    return {"specFiles": public_spec_files(spec_raw), "staged": public_staged(spec_raw, username), "mergeFiles": merge_ids_of(data_json)}
 
 
 def _reject(rejected: list, name: str, reason: str, message: str) -> None:
@@ -237,22 +423,29 @@ def _reject(rejected: list, name: str, reason: str, message: str) -> None:
 
 @router.post("/api/quotations/{quote_no}/spec-files")
 async def upload_spec_files(quote_no: str, files: List[UploadFile] = File(...), authorization: str = Header(None)):
-    """上傳規格 PDF（多檔）。回 200：`{specFiles, mergeFiles, rejected}`——不合格的檔列在 `rejected`（`reason` 見 `REJECT_REASONS`），
-    其餘照存；整批都不合格也是 200（`specFiles` 不變、`rejected` 全列）。不自動勾選：要併哪幾份由使用者在表單選、隨報價單存檔。"""
+    """上傳規格 PDF（多檔）。回 200：`{specFiles, staged, mergeFiles, rejected}`——不合格的檔列在 `rejected`（`reason` 見 `REJECT_REASONS`），
+    其餘照存；整批都不合格也是 200（清單不變、`rejected` 全列）。不自動勾選：要併哪幾份由使用者在表單選、隨報價單存檔。
+    狀態分流（`_quote_edit_gate`）：可編輯狀態＝立即生效；鎖定狀態＋解鎖編輯（最高管理者）＝**暫存**（`staged` 清單；存檔時由 `_specChanges` 轉正）。"""
     user = _require_user(authorization)
     from modules.case.api import quotations as Q          # 延後載入：quotations.py 頂層會 import 本檔
+    _maybe_sweep()
     conn = get_db()
     try:
         Q._guard_case(conn, quote_no, user)
         row = conn.execute("SELECT status, spec_files_json, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
             raise HTTPException(404, "報價單不存在")
-        _quote_edit_gate(row, user)
-        cur = load_spec_files(row["spec_files_json"])
+        mode = _quote_edit_gate(row, user, conn, quote_no)
+        me = user["username"]
+        by = user.get("display_name") or me
+
+        def mine(lst):                                         # 數量／大小上限只算：已生效＋本人暫存
+            return [f for f in lst if not f.get("staged") or _staged_by(f) == me]
+
+        cur = mine(_load_all(row["spec_files_json"]))
         count = len(cur)
         total = sum(int(f.get("size") or 0) for f in cur)
         cap = _up.max_file_bytes()
-        by = user.get("display_name") or user["username"]
         new_files, rejected = [], []
         for up in files:
             name = up.filename or ""
@@ -280,79 +473,128 @@ async def upload_spec_files(quote_no: str, files: List[UploadFile] = File(...), 
                 continue
             s = saved[0]
             status, pages = _pm.probe_pdf(os.path.join(_up.UPLOADS_ROOT, *s["path"].split("/")))
-            new_files.append({"id": uuid.uuid4().hex, "name": s["filename"], "path": s["path"], "size": s["size"], "pages": pages,
-                              "status": status, "uploadedAt": s["uploadedAt"], "uploadedBy": by})
+            ent = {"id": uuid.uuid4().hex, "name": s["filename"], "path": s["path"], "size": s["size"], "pages": pages,
+                   "status": status, "uploadedAt": s["uploadedAt"], "uploadedBy": by}
+            if mode == "staged":
+                ent["staged"] = {"by": me, "at": datetime.now().isoformat()}
+            new_files.append(ent)
             total += s["size"]
         if not new_files:
-            out = _response(cur, row["data_json"])
+            out = _response(row["spec_files_json"], row["data_json"], me)
             out["rejected"] = rejected
             return out
 
         def _cap_guard(latest):                                # 寫鎖內重驗：上傳途中別人也傳了
-            if len(latest) + len(new_files) > MAX_SPEC_FILES or \
-               sum(int(f.get("size") or 0) for f in latest) + sum(f["size"] for f in new_files) > MAX_SPEC_TOTAL_BYTES:
+            lm = mine(_load_all(latest))
+            if len(lm) + len(new_files) > MAX_SPEC_FILES or \
+               sum(int(f.get("size") or 0) for f in lm) + sum(f["size"] for f in new_files) > MAX_SPEC_TOTAL_BYTES:
                 raise HTTPException(409, "規格文件數量或大小已達上限（上傳途中有人也上傳了檔案），請重新整理後再傳")
 
         with files_txn(conn, new_files):                       # 任何失敗 ⇒ rollback 並刪掉這批剛存的檔
             fresh = conn.execute("SELECT status, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
             if not fresh:
                 raise HTTPException(404, "報價單不存在")
-            _quote_edit_gate(fresh, user)                      # 上傳途中狀態變了（例：被送審）⇒ 擋下、檔收回
+            if _quote_edit_gate(fresh, user, conn, quote_no) != mode:     # 上傳途中狀態變了（例：被送審）⇒ 擋下、檔收回
+                raise HTTPException(409, "報價單狀態在上傳途中改變了，請重新整理後再傳")
             merged = append_json_list(conn, "quotations", "spec_files_json", "quote_no", quote_no, new_files,
                                       guard=_cap_guard, not_found="報價單不存在")
-        out = _response(merged, fresh["data_json"])
+        out = _response(merged, fresh["data_json"], me)
         out["rejected"] = rejected
     finally:
         conn.close()
     names = "、".join(str(f["name"])[:60] for f in new_files)[:300]
-    _audit(_tok(authorization), "quotation.upload_spec_files", "quotation", quote_no,
-           "%s（%d 個規格文件：%s）" % (quote_no, len(new_files), names))
+    if mode == "staged":
+        _audit(_tok(authorization), "quotation.stage_spec_files", "quotation", quote_no,
+               "%s（解鎖編輯暫存 %d 個規格文件，存檔後才生效：%s）" % (quote_no, len(new_files), names))
+    else:
+        _audit(_tok(authorization), "quotation.upload_spec_files", "quotation", quote_no,
+               "%s（%d 個規格文件：%s）" % (quote_no, len(new_files), names))
     return out
 
 
 @router.delete("/api/quotations/{quote_no}/spec-files/{file_id}")
 def delete_spec_file(quote_no: str, file_id: str, authorization: str = Header(None)):
-    """刪除一份規格文件：檔案清單、`data_json.mergeFiles`（若有選它）同一個寫交易；commit 之後才刪實體檔。回 `{specFiles, mergeFiles}`。
-    清單裡沒有這個 id ⇒ 404；檔案路徑不在這張單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟。"""
+    """刪除一份規格文件。
+    - 可編輯狀態：檔案清單、`data_json.mergeFiles`（若有選它）同一個寫交易；commit 之後才刪實體檔。
+    - 解鎖編輯（鎖定狀態）：**已生效**的檔不可由這支刪（403；畫面標「待刪」、存檔時由 `_specChanges.remove` 一併處理）；
+      本人**暫存**、尚未存檔的檔可以直接丟掉（它從來沒生效過）。
+    回 `{specFiles, staged, mergeFiles}`。清單裡沒有這個 id（或是別人的暫存）⇒ 404；檔案路徑不在這張單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟。"""
     user = _require_user(authorization)
     from modules.case.api import quotations as Q
     from modules.case.quotations import save_quotation_json
+    _maybe_sweep()
     conn = get_db()
     try:
         Q._guard_case(conn, quote_no, user)
         pre = conn.execute("SELECT status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not pre:
             raise HTTPException(404, "報價單不存在")
-        _quote_edit_gate(pre, user)
+        _quote_edit_gate(pre, user, conn, quote_no)
+        me = user["username"]
         target = None
         with files_txn(conn, []):                              # 讀 data_json 之前先拿寫鎖（lost update）；任何失敗 ⇒ 全部 rollback
             row = conn.execute("SELECT status, spec_files_json, data_json, updated_at FROM quotations WHERE quote_no=?",
                                (quote_no,)).fetchone()
             if not row:
                 raise HTTPException(404, "報價單不存在")
-            _quote_edit_gate(row, user)
-            cur = load_spec_files(row["spec_files_json"])
+            mode = _quote_edit_gate(row, user, conn, quote_no)
+            cur = _load_all(row["spec_files_json"])
             target = next((f for f in cur if f["id"] == file_id), None)
-            if target is None:
+            if target is None or (target.get("staged") and _staged_by(target) != me):
                 raise HTTPException(404, "找不到這份規格文件")
             if _up.upload_path_key(target, SPEC_FOLDER) != quote_no:
                 raise HTTPException(409, "這份規格文件的檔案位置不正確，無法刪除；請洽管理員")
+            if mode == "staged" and not target.get("staged"):
+                raise HTTPException(403, "解鎖編輯中，已生效的規格文件請在畫面標記「待刪」，存檔後才會生效")
             remaining = [f for f in cur if f["id"] != file_id]
             conn.execute("UPDATE quotations SET spec_files_json=? WHERE quote_no=?",
                          (json.dumps(remaining, ensure_ascii=False), quote_no))
             data = json.loads(row["data_json"] or "{}") or {}
             mids = merge_ids_of(data)
-            if file_id in mids:
+            if not target.get("staged") and file_id in mids:
                 left = [i for i in mids if i != file_id]
                 if left:
                     data["mergeFiles"] = left
                 else:
                     data.pop("mergeFiles", None)                # 沒選＝不存這個鍵
                 save_quotation_json(conn, quote_no, data, updated_at=row["updated_at"])      # 維持 updated_at（見檔頭）
-        out = _response(remaining, data)
+        out = _response(remaining, data, me)
     finally:
         conn.close()
     remove_physical_file(target)                                # commit 之後才刪實體檔（失敗＝留下孤兒檔、不影響資料）
-    _audit(_tok(authorization), "quotation.delete_spec_file", "quotation", quote_no,
-           "%s（%s）" % (quote_no, str(target.get("name") or "")[:60]))
+    _audit(_tok(authorization), "quotation.discard_spec_files" if target.get("staged") else "quotation.delete_spec_file",
+           "quotation", quote_no, "%s（%s）" % (quote_no, str(target.get("name") or "")[:60]))
+    return out
+
+
+@router.post("/api/quotations/{quote_no}/spec-files/discard-staged")
+def discard_staged_spec_files(quote_no: str, authorization: str = Header(None)):
+    """放棄修改／重新鎖定／重新解鎖前清場：刪掉**本人**的暫存規格檔（紀錄＋實體檔；實體檔 commit 之後才刪）。冪等；沒有暫存＝什麼都不做。
+    只動本人暫存項、不碰已生效的檔，所以不再要求解鎖證明（證明過期不該讓人清不掉自己的殘檔）。回 `{specFiles, staged:[], mergeFiles}`。"""
+    user = _require_user(authorization)
+    from modules.case.api import quotations as Q
+    _maybe_sweep()
+    conn = get_db()
+    gone = []
+    try:
+        Q._guard_case(conn, quote_no, user)
+        me = user["username"]
+        with files_txn(conn, []):
+            row = conn.execute("SELECT spec_files_json, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            if not row:
+                raise HTTPException(404, "報價單不存在")
+            allf = _load_all(row["spec_files_json"])
+            gone = [f for f in allf if f.get("staged") and _staged_by(f) == me]
+            keep = [f for f in allf if f not in gone]
+            if gone:
+                conn.execute("UPDATE quotations SET spec_files_json=? WHERE quote_no=?",
+                             (json.dumps(keep, ensure_ascii=False), quote_no))
+        out = _response(keep, row["data_json"], me)
+    finally:
+        conn.close()
+    for f in gone:
+        remove_physical_file(f)
+    if gone:
+        _audit(_tok(authorization), "quotation.discard_spec_files", "quotation", quote_no,
+               "%s（放棄 %d 個暫存規格文件）" % (quote_no, len(gone)))
     return out
