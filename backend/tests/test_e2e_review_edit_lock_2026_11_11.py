@@ -305,3 +305,32 @@ def test_locked_form_blocks_content_mutating_buttons_and_stays_clean(live_server
     }""")
     assert res["n"] >= 2 and res["live"] == [], res
     assert res["rows1"] == res["rows0"] and res["dirty1"] is False, res
+
+
+@pytest.mark.e2e
+def test_review_edit_discard_button_asks_first_and_returns_to_the_server_version(live_server, make_user, e2e_browser):
+    """2026-11-17：複查編輯的離開按鈕是「儲存複查編輯」／「放棄修改」（沒有「重新鎖定」）；放棄先確認，確認後回伺服器版、不送任何存檔；畫面上沒有「儲存草稿」字樣。"""
+    u, p = make_user(username="relk_ap9", role="admin", modules=["quotation"])
+    _set_mode(2)
+    _seed([u])
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    posts = []
+    page.on("request", lambda rq: posts.append(rq.url) if rq.method in ("PUT", "POST") and (rq.url.endswith("/review-edit") or "/api/quotations/" in rq.url and rq.method == "PUT") else None)
+    _open_form(page, live_server)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
+    page.click('[data-testid="qf-review-edit-start"]')
+    page.wait_for_selector('[data-testid="review-edit-bar"]', timeout=5000)
+    page.wait_for_function("() => !document.querySelector('.qty-input').readOnly", timeout=5000)
+    assert "儲存草稿" not in page.inner_text("body") and page.locator('[data-testid="qf-relock"]').count() == 0
+    before = page.input_value(QTY)
+    page.fill(QTY, "88")
+    page.once("dialog", lambda d: d.dismiss())
+    page.click('[data-testid="review-edit-cancel"]')
+    page.wait_for_timeout(500)
+    assert page.is_visible('[data-testid="review-edit-bar"]') and page.input_value(QTY) == "88", "取消確認：仍在編輯、修改還在"
+    page.once("dialog", lambda d: d.accept())
+    page.click('[data-testid="review-edit-cancel"]')
+    page.wait_for_function("(b) => document.querySelector('.qty-input').readOnly && document.querySelector('.qty-input').value === b", arg=before, timeout=10000)   # 先鎖定、再載回伺服器版（非同步）
+    assert page.input_value(QTY) == before and _is_locked(page)
+    assert _state()[0]["items"][0]["qty"] == 1 and posts == []

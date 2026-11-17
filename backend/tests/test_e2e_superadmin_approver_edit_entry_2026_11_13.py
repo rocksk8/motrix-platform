@@ -137,30 +137,181 @@ def test_approve_return_reject_buttons_are_hidden_while_unlocked_and_back_after_
     assert page.get_by_role("button", name="退回修改").is_visible()
 
 
+def _flow_with(make_user, username):
+    """解鎖存檔會重建簽核鏈：用「統一簽核流程」指定一位簽核人（不依賴送審人的部門設定）；改內容的最高管理者不在鏈中。"""
+    import json
+    import db
+    make_user(username=username, role="admin", modules=["quotation"])
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR REPLACE INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)",
+                  ("unified_approval_flow",
+                   json.dumps({"tiers": [{"approvers": [{"username": username, "display_name": username}]}], "includeSubmitterManagerTier": False}, ensure_ascii=False),
+                   "2026-11-17T00:00:00"))
+        c.commit()
+    finally:
+        c.close()
+
+
+def _track_puts(page):
+    """記下這個頁面送出的報價單 PUT（存檔次數）；回傳 list。"""
+    puts = []
+    page.on("request", lambda rq: puts.append(rq.url) if rq.method == "PUT" and "/api/quotations/" in rq.url else None)
+    return puts
+
+
+def _server_qty():
+    from tests.test_e2e_review_edit_lock_2026_11_11 import _state
+    return _state()[0]["items"][0]["qty"]
+
+
 @pytest.mark.e2e
-def test_relock_with_unsaved_edit_asks_first_and_discards_to_the_server_version(live_server, make_user, e2e_browser):
-    """h9 L2：重新鎖定時有沒存的修改 ⇒ 先確認；確認後載回伺服器版（不留「鎖住卻顯示改過的值」）；取消確認 ⇒ 維持解鎖、修改還在。"""
-    u, p = make_user(username="sae_l2", role="superadmin", modules=["quotation"])
+def test_relock_with_unsaved_edit_saves_once_then_locks_and_the_value_survives_reload(live_server, make_user, e2e_browser):
+    """2026-11-17：有未存的修改按「重新鎖定」⇒ 走「儲存修改」同一條儲存（只送一次 PUT）→ 成功後鎖回去；重新載入後值已存、仍鎖定。"""
+    u, p = make_user(username="sae_rl1", role="superadmin", modules=["quotation"])
+    _set_unlock_password(u)
+    _set_mode(2)
+    _seed([u])
+    _flow_with(make_user, "sae_rl1_ap")
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    puts = _track_puts(page)
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+    _unlock(page, live_server, u)
+    page.fill(QTY, "37")
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
+    assert not page.is_visible('[data-testid="qf-unlocked-banner"]')
+    assert page.is_visible('[data-testid="qf-unlock-edit"]')
+    assert _server_qty() == 37, "重新鎖定要把修改存進伺服器"
+    page.wait_for_timeout(800)                                                 # 負向斷言：給可能的第二次存檔一個流動的機會
+    assert len(puts) == 1, f"只存一次（不重複寫入／通知）：{puts}"
+    assert not any("失敗" in m for m in dialogs), dialogs
+    assert len([m for m in dialogs if "建立客戶檔案" in m]) == 1 and len(dialogs) == 1, f"存一次只會有一次「建立客戶檔案」詢問（checkAndCreateCustomer 沒被呼叫兩次）：{dialogs}"
+    page.reload()
+    page.wait_for_selector(QTY, state="attached", timeout=15000)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
+    assert page.input_value(QTY) == "37" and _is_locked(page)
+
+
+@pytest.mark.e2e
+def test_relock_without_changes_just_locks_and_sends_nothing(live_server, make_user, e2e_browser):
+    u, p = make_user(username="sae_rl2", role="superadmin", modules=["quotation"])
     _set_unlock_password(u)
     _set_mode(2)
     _seed([u])
     page = e2e_browser.new_page()
     inject_login(page, live_server, u, p)
+    puts = _track_puts(page)
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+    _unlock(page, live_server, u)
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
+    page.wait_for_timeout(500)
+    assert puts == [] and dialogs == []
+
+
+@pytest.mark.e2e
+def test_relock_when_the_save_fails_stays_unlocked_keeps_the_edit_and_shows_the_reason(live_server, make_user, e2e_browser):
+    u, p = make_user(username="sae_rl3", role="superadmin", modules=["quotation"])
+    _set_unlock_password(u)
+    _set_mode(2)
+    _seed([u])
+    _flow_with(make_user, "sae_rl3_ap")
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+    _unlock(page, live_server, u)
+    before = _server_qty()
+    state = {"fail": True}
+
+    def _handle(route):
+        if route.request.method == "PUT" and state["fail"]:
+            route.fulfill(status=422, content_type="application/json", body='{"detail":"測試用：儲存被拒絕"}')
+        else:
+            route.continue_()
+
+    page.route("**/api/quotations/**", _handle)
+    page.fill(QTY, "41")
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function("() => true")
+    assert _wait_for(lambda: any("儲存失敗" in m for m in dialogs), page), dialogs
+    assert any("測試用：儲存被拒絕" in m for m in dialogs), "要顯示失敗原因：" + str(dialogs)
+    assert page.is_visible('[data-testid="qf-unlocked-banner"]'), "存檔失敗：維持解鎖"
+    assert not page.evaluate("() => document.querySelector('.qty-input').readOnly")
+    assert page.input_value(QTY) == "41", "存檔失敗：畫面上的修改要留著"
+    assert _server_qty() == before
+    # 原因排除後再按一次「重新鎖定」：存進去並鎖回去
+    state["fail"] = False
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
+    assert _server_qty() == 41 and _is_locked(page)
+
+
+def _wait_for(pred, page, tries=50, ms=200):
+    for _ in range(tries):
+        if pred():
+            return True
+        page.wait_for_timeout(ms)
+    return pred()
+
+
+@pytest.mark.e2e
+def test_discard_button_asks_first_then_returns_to_the_server_version(live_server, make_user, e2e_browser):
+    """「放棄修改」才會丟掉修改：先確認；按取消 ⇒ 維持解鎖、修改還在；確認 ⇒ 回到伺服器版、鎖定、不送 PUT。"""
+    u, p = make_user(username="sae_rl4", role="superadmin", modules=["quotation"])
+    _set_unlock_password(u)
+    _set_mode(2)
+    _seed([u])
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    puts = _track_puts(page)
     _unlock(page, live_server, u)
     before = page.input_value(QTY)
     page.fill(QTY, "37")
-    assert page.input_value(QTY) == "37"
-    page.once("dialog", lambda d: d.dismiss())                                               # 先按「取消」：維持解鎖、修改還在
-    page.click('[data-testid="qf-relock"]')
-    page.wait_for_timeout(500)                                                               # 給「取消」的處理一點時間（下面再用狀態等待確認，不靠這個睡眠）
-    page.wait_for_selector('[data-testid="qf-unlocked-banner"]', state="visible", timeout=5000)      # 維持解鎖：橫幅還在
-    page.wait_for_function("(q) => document.querySelector(q).value === '37'", arg=QTY, timeout=5000)   # 修改還在
-    assert page.input_value(QTY) == "37"
-    page.once("dialog", lambda d: d.accept())                                                # 再按一次、這次確認
-    page.click('[data-testid="qf-relock"]')
+    page.once("dialog", lambda d: d.dismiss())
+    page.click('[data-testid="qf-discard-unlock-edit"]')
+    page.wait_for_timeout(500)
+    assert page.is_visible('[data-testid="qf-unlocked-banner"]') and page.input_value(QTY) == "37"
+    page.once("dialog", lambda d: d.accept())
+    page.click('[data-testid="qf-discard-unlock-edit"]')
     page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
-    assert page.input_value(QTY) == before, "放棄修改後要回到伺服器上的值"
-    assert _is_locked(page) and not page.is_visible('[data-testid="qf-unlocked-banner"]')
+    assert page.input_value(QTY) == before and _is_locked(page) and not page.is_visible('[data-testid="qf-unlocked-banner"]')
+    assert _server_qty() == int(before) and puts == []
+
+
+@pytest.mark.e2e
+def test_no_draft_wording_while_unlocked_and_double_click_relock_saves_once(live_server, make_user, e2e_browser):
+    u, p = make_user(username="sae_rl5", role="superadmin", modules=["quotation"])
+    _set_unlock_password(u)
+    _set_mode(2)
+    _seed([u])
+    _flow_with(make_user, "sae_rl5_ap")
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    puts = _track_puts(page)
+    page.on("dialog", lambda d: d.accept())
+    _unlock(page, live_server, u)
+    body = page.inner_text("body")
+    assert "儲存草稿" not in body and "草稿已儲存" not in body, "送審中的單解鎖編輯時不該出現「草稿」字樣"
+    assert page.get_by_role("button", name="儲存修改").first.is_visible()
+    page.fill(QTY, "52")
+    page.dblclick('[data-testid="qf-relock"]')
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
+    page.wait_for_timeout(800)
+    assert len(puts) == 1 and _server_qty() == 52, puts
+
+
+def test_unlock_banner_has_no_ambiguous_cancel_button_and_relock_goes_through_savedraft():
+    from core import source_tree
+    html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
+    assert "取消解鎖" not in html
+    i = html.index("      async cancelUnlock() {")
+    body = html[i:html.index("      async discardUnlockEdit()", i)]
+    assert "await this.saveDraft()" in body and "apiSave" not in body and "unlocked = false" not in body, "重新鎖定必須走 saveDraft，且不得先把 unlocked 設成 false"
 
 
 def test_autosave_does_not_run_while_unlocked():
