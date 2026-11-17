@@ -70,3 +70,29 @@
 | **合計** | **約 7.5 天** |
 
 建議分兩段交：**A＝備註欄位＋範本（約 3 天）**，**B＝規格 PDF 併入（約 4.5 天）**。A 可先上線，B 不阻擋 A。
+
+## 10. 可沿用盤點（2026-11-17，使用者裁示 A＋B 一次做完、動工前先查；D1～D5 已定案：10 檔／20MB／50MB／300 頁；docVersions 含併入附件；複製只複製備註文字；範本在 quotation-form 內管理）
+
+**結論：新增 `quotations.spec_files_json`（與 `signed_files_json` 同形狀）。系統裡沒有「通用附件表」**——所有附件都是「各單據自己的 JSON 欄位＋uploads 資料夾」，再由擁有模組向 L1 登錄三件東西：①`uploads.path_access`（誰能讀這個路徑）②`attachments.for_document`／`catalog`（檔案中心、開檔、搜尋）③`save_document_files` 存檔。所以「掛到既有附件表」不存在；最一致的作法就是照 `quotation_signed` 的樣子加一個新來源類型。
+
+| # | 項目 | 能不能用 | 理由／要改什麼 |
+|---|---|---|---|
+| 1 | 檔案中心 `file-center.html`／`/api/filehub/search`／`/api/attachments/open` | **要接上（小改，不改檔案中心本身）** | 它不存檔，是讀各模組 `attachments.catalog` 提供者的結果。新來源類型 `quotation_spec` 登錄進 M01 提供者（`modules/case/attachments.py`：`SOURCE_TYPES`、`_docs`、`_quote_of`、`_read`、`_READ_RULE`＝`case_page_readable`、`_FOLDER_SOURCE`、`_CATALOG_FOLDER`、`CATEGORIES`），規格文件就自動出現在檔案中心、可預覽、可搜尋，且可見範圍＝報價單本身（不寬不嚴）。**不登錄＝存得進去但檔案中心看不到、開檔 404**。資料夾用新的 `quotation_specs`（不與回簽共用 `quotations`，因為 `_FOLDER_SOURCE` 是「資料夾→單一來源類型」） |
+| 2 | 案件附件上傳工具 `save_document_files`／`files_txn`／`append_json_list`／`remove_json_item`／`upload_path_key`／`pick_file` | **直接用** | 與回簽檔同一組；T83 的寫鎖重讀、失敗回收實體檔、路徑綁單據（W3）、魔術位元組檢查（`_check_upload_magic`，副檔名與內容不符會擋）全部現成。**要補兩點**：①這組上傳白名單是 jpg／png／pdf，沒有「只收 PDF」的資料夾級設定 ⇒ 在新端點先擋非 `.pdf`；②`UPLOAD_LIMITS_BY_SUBFOLDER` 加 `quotation_specs`＝`max_files 10`、`max_request_bytes 50MB`（單檔 20MB 沿用） |
+| 3 | 客戶回簽檔 `signed_files_json`：上傳／刪除端點、前端預覽 | **端點樣式照抄、不共用端點** | 它的閘門是「報價單已送出才能傳」（`_signed_back_gate`）、刪除規則是上傳者本人或 admin+，和規格文件（送出前、跟著編輯狀態）相反，不能直接共用。前端預覽直接用 `MotrixFilePreview.openFile`（回簽附件現在就是這樣開的）；列表 chip 的樣子可沿用 |
+| 4 | 派發／出納附件（`contractor_dispatches`、`shipping_notes`、`quotation_payment_items`…） | **不適用（但證實了模式）** | 各自綁自己的單據與讀取規則；都是同一個「JSON 欄＋資料夾＋提供者」模式，沒有可共用的儲存。出納只是對收付款項目附件加金額遮蔽規則，與本案無關 |
+| 5 | 報價條款範本 `quote_terms_presets`（`routers/system.py`） | **照抄做法、不共用資料** | 整組覆寫 PUT（≤30 組）、僅最高管理者寫／能編輯者讀、稽核 `_audit`、變更通知 `_notify_quote_terms_changed`＋`_quote_terms_change_rows`、「存的是複製過去的文字」原則 ⇒ 範本 API 完全照這個形狀（鍵改 `quote_extra_notes_templates`，上限 100 組、每組 20,000 字）。通知函式要新增一支等價的（行內容是範本名稱／字數差異），不改條款組的 |
+| 6 | `voucher_pdf._merge_pdfs`（傳票 PDF 合併） | **邏輯可用、不能直接 import** | 25 行純函式，已踩過三個坑（壞檔在開檔丟／加密到取頁才丟／零頁不丟）。它在 `modules/accounting` 內（私有函式）；M01 不能依賴會員模組（L2 模組可拆分，accounting 不在時案件頁仍要能輸出）⇒ 在 L1 新增 `helpers/pdf_merge.py`，帶同樣三個處理＋新增頁數／大小上限；**傳票那邊先不動**（不擴大本案影響面，之後可讓它改用共用件）。**一個刻意的差異**：傳票在末尾加一頁「併不進去清單」；報價單是客戶版文件，不能把我們內部的問題印給客戶看 ⇒ 缺口改用「上傳當下提示＋下載回應標頭＋畫面提示＋稽核」輸出（仍符合該檔的原則：不靜默略過） |
+| 7 | 自訂欄位／模組建構器：長文字欄位 | **不適用** | 內建畫面（報價單）的自訂欄位型別只有 text／date／select／checkbox，文字上限預設 200 字，單據 JSON 上限 8KB（`builtin_fields.py`）；`textarea` 只有自訂模組有。備註事項要 20,000 字、純文字原樣保留 ⇒ 自己存 `data_json.extraNotes` |
+| 8 | 自訂欄位／建構器：附件欄位 | **不適用** | `custom_files`（file／image 欄位）只服務「自訂模組的紀錄」（資料夾 `custom_records`，檔案綁在模組＋欄位）。附件插槽 `attachment_slots`（BP-4）目前只開放完工單、且在旗標 `builder_slots` 後面；都不是報價單用的 |
+| 9 | 前端共用上傳元件 | **直接用 `AttachPicker`（`static/attach-picker.js`）** | 累加挑檔、逐一移除、送出前擋副檔名／單檔大小／數量／合計大小；預設值剛好就是 10 檔／20MB／50MB，我們只傳 `exts:['.pdf']`。與伺服器同一組限制，伺服器仍會再擋 |
+| 10 | 前端共用可排序清單 | **不用；用 ↑↓ 按鈕** | `list-sort.js` 是「清單排序偏好」（存個人偏好），不是拖曳元件；報價單頁的 SortableJS 只綁品項表且有一整套鎖定規則。≤10 個檔案，↑↓ 按鈕更簡單、鍵盤與手機都可用（示意圖就是這樣畫） |
+
+### 因盤點而追加的工作（都是追加，不改既有設計方向）
+1. **M01 附件提供者登錄 `quotation_spec`**（見 #1）＋ `UPLOAD_LIMITS_BY_SUBFOLDER`／PDF-only 擋（#2）。守門測試要跟著補（新資料夾必須有 path_access 登錄、檔案中心找得到、跨單據路徑開不了）。
+2. **簽核佇列的報價單詳情**（`quotations.py` 約 7395 行 `AT1` 區）：目前只列「付款條件」與附件；要加「備註事項」一列與「併入輸出的規格文件」（附件名稱前綴【規格文件】），簽核人才看得到將送給客戶的內容。附件檔案走該處既有的 `file_entries`，簽核人讀檔方式實作時驗證（不放寬 `case_page_readable`）。
+3. **範本變更通知**新增專用函式（#5）；範本 PUT 要有稽核紀錄。
+4. 檔案中心分類名稱：「報價單規格文件」（`CATEGORIES` 的 label）。
+
+### 工時修正
+盤點讓 B 段略增（提供者登錄＋守門測試＋簽核佇列詳情，約 +1 天），但省掉自寫上傳元件與排序元件（約 −0.5 天）；合計仍約 **8 個工作天**（一次交 A＋B）。
