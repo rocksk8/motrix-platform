@@ -2242,28 +2242,36 @@
             請先存成草稿，取得單號後才能上傳規格文件。
           </div>
           <div x-show="!isNewRecord">
+            <div x-show="unlocked" data-testid="qf-spec-unlock-hint" style="font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:6px 10px;margin-bottom:6px">
+              解鎖編輯中：新上傳與刪除的規格文件要按「儲存修改」才生效（並重新送簽）；按「重新鎖定」或放棄修改會回到原狀。
+            </div>
             <template x-for="(f, idx) in specRows" :key="f.id">
-              <div data-testid="qf-spec-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;background:#fff">
-                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="isStatusLocked()">
+              <div data-testid="qf-spec-row" :data-spec-state="f.staged ? 'staged' : (specPendingDel(f.id) ? 'deleting' : 'ok')" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;background:#fff"
+                   :style="specPendingDel(f.id) ? 'opacity:.6;background:#FEF2F2' : (f.staged ? 'background:#F0FDF4' : '')">
+                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="isStatusLocked() || specPendingDel(f.id)">
                 <span data-testid="qf-spec-order" x-show="specSelected(f.id)" style="font-size:11px;font-weight:700;min-width:20px" x-text="(q.mergeFiles || []).indexOf(f.id) + 1 + '.'"></span>
-                <a href="javascript:void(0)" @click="previewSpec(f)" style="color:var(--accent);text-decoration:underline;font-size:12px" x-text="f.name"></a>
+                <a x-show="!f.staged" href="javascript:void(0)" @click="previewSpec(f)" style="color:var(--accent);font-size:12px" :style="specPendingDel(f.id) ? 'text-decoration:line-through' : 'text-decoration:underline'" x-text="f.name"></a>
+                <span x-show="f.staged" style="font-size:12px" x-text="f.name"></span>
+                <span x-show="f.staged" data-testid="qf-spec-staged-badge" style="font-size:11px;color:#166534;background:#DCFCE7;border-radius:4px;padding:1px 6px">待儲存</span>
+                <span x-show="specPendingDel(f.id)" data-testid="qf-spec-deleting-badge" style="font-size:11px;color:#991B1B;background:#FEE2E2;border-radius:4px;padding:1px 6px">待刪除</span>
                 <span style="font-size:11px;color:var(--text-dim)" x-text="specMeta(f)"></span>
                 <span x-show="f.status && f.status !== 'ok'" data-testid="qf-spec-warn"
                       style="font-size:11px;color:#B91C1C;background:#FEE2E2;border-radius:4px;padding:1px 6px" x-text="specWarn(f)"></span>
                 <span style="margin-left:auto;display:flex;gap:4px">
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-up" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === 0" @click="moveSpec(f.id, -1)">↑</button>
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-down" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === (q.mergeFiles || []).length - 1" @click="moveSpec(f.id, 1)">↓</button>
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" style="color:#B91C1C" :disabled="isStatusLocked()" @click="deleteSpecFile(f)">刪除</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-restore" x-show="specPendingDel(f.id)" @click="restoreSpec(f.id)">還原</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" x-show="!specPendingDel(f.id)" style="color:#B91C1C" :disabled="isStatusLocked()" @click="deleteSpecFile(f)" x-text="f.staged ? '移除' : '刪除'">刪除</button>
                 </span>
               </div>
             </template>
-            <div x-show="!specFiles.length" style="font-size:11px;color:var(--text-dim);padding:4px 0">尚無規格文件。</div>
+            <div x-show="!specRows.length" style="font-size:11px;color:var(--text-dim);padding:4px 0">尚無規格文件。</div>
             <label data-testid="qf-spec-upload" style="display:inline-block;margin-top:4px;padding:5px 12px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer"
                    :style="(isStatusLocked() || specUploading) ? 'opacity:.5;pointer-events:none' : ''">
               <span x-text="specUploading ? '上傳中…' : '＋ 上傳規格 PDF'"></span>
               <input type="file" multiple accept=".pdf,application/pdf" style="display:none" data-testid="qf-spec-input" @change="uploadSpecFiles($event)">
             </label>
-            <span style="font-size:11px;color:var(--text-dim);margin-left:8px" x-text="specFiles.length + ' / 10 個'"></span>
+            <span style="font-size:11px;color:var(--text-dim);margin-left:8px" x-text="specCount + ' / 10 個'"></span>
           </div>
         </div>
       </div>
@@ -3072,6 +3080,8 @@
       notesMgrOpen: false, notesTplDraft: [], notesMgrQ: '', notesTplSaving: false,
       // ── 規格文件（2026-11-17）：清單來自單筆 GET 的頂層 specFiles（不放進 q，避免被整份存檔送回去）──
       specFiles: [], specUploading: false,
+      specStaged: [],            // 解鎖編輯中上傳、尚未存檔的規格檔（伺服器暫存；存檔時以 _specChanges.add 送回）
+      specPendingDelete: [],     // 解鎖編輯中標記刪除、尚未存檔的規格檔 id（純本機；存檔時以 _specChanges.remove 送回）
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
@@ -3962,9 +3972,31 @@
       get specRows() {
         // 已勾選的（依合併順序）排前面，沒勾的接在後面（維持上傳順序）
         const sel = this.q.mergeFiles || []
-        const byId = new Map(this.specFiles.map(f => [f.id, f]))
-        return [...sel.map(id => byId.get(id)).filter(Boolean), ...this.specFiles.filter(f => !sel.includes(f.id))]
+        const all = this.specAll
+        const byId = new Map(all.map(f => [f.id, f]))
+        return [...sel.map(id => byId.get(id)).filter(Boolean), ...all.filter(f => !sel.includes(f.id))]
       },
+      get specAll() { return [...this.specFiles, ...this.specStaged.map(f => ({ ...f, staged: true }))] },
+      get specCount() { return this.specAll.filter(f => !this.specPendingDel(f.id)).length },
+      specPendingDel(id) { return this.specPendingDelete.includes(id) },
+      _specChangesPayload() {
+        const add = this.specStaged.map(f => f.id), remove = [...this.specPendingDelete]
+        return (add.length || remove.length) ? { add, remove } : null
+      },
+      _specClearLocal() { this.specStaged = []; this.specPendingDelete = [] },
+      // 解鎖編輯收尾（放棄／重新鎖定／剛解鎖）：清掉伺服器上本人的暫存檔與本機的待刪標記；冪等、失敗不擋主流程
+      async _discardStagedSpecs() {
+        this._specClearLocal()
+        if (!this.q.quoteNo || this.isNewRecord) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files/discard-staged`, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const d = await r.json().catch(() => ({}))
+          if (Array.isArray(d.specFiles)) this.specFiles = d.specFiles
+        } catch (_e) {}
+      },
+      restoreSpec(id) { this.specPendingDelete = this.specPendingDelete.filter(x => x !== id); this.setDirty() },
       specSelected(id) { return (this.q.mergeFiles || []).includes(id) },
       specMeta(f) {
         const kb = f.size ? (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB') : ''
@@ -3978,7 +4010,7 @@
         const i = sel.indexOf(id)
         if (i >= 0) sel.splice(i, 1)
         else {
-          const f = this.specFiles.find(x => x.id === id)
+          const f = this.specAll.find(x => x.id === id)
           if (f && f.status && f.status !== 'ok' && !confirm(`「${f.name}」${this.specWarn(f)}。仍要勾選嗎？`)) { this.q.mergeFiles = [...(this.q.mergeFiles || [])]; return }
           sel.push(id)
         }
@@ -4007,22 +4039,31 @@
           const d = await r.json().catch(() => ({}))
           if (!r.ok) { alert(d.detail || '上傳失敗'); return }
           this.specFiles = d.specFiles || this.specFiles
+          const staging = Array.isArray(d.staged)           // 解鎖編輯：伺服器只暫存，存檔才生效
+          if (staging) { this.specStaged = d.staged; this.setDirty() }
           if ((d.rejected || []).length) alert('以下檔案未收：\n' + d.rejected.map(x => `・${x.name}：${x.reason}`).join('\n'))
-          else this.toast(`已上傳 ${files.length} 個規格文件（要併入輸出請勾選）`)
-          this._refreshUpdatedAt && this._refreshUpdatedAt()
+          else this.toast(staging && this.unlocked ? `已暫存 ${files.length} 個規格文件（按「儲存修改」才生效）` : `已上傳 ${files.length} 個規格文件（要併入輸出請勾選）`)
+          if (!staging || !this.unlocked) this._refreshUpdatedAt && this._refreshUpdatedAt()
         } catch (e) { alert('上傳失敗：' + e.message) }
         finally { this.specUploading = false; evt.target.value = '' }
       },
       async deleteSpecFile(f) {
         if (!confirm(`確定刪除規格文件「${f.name}」？${this.specSelected(f.id) ? '\n它目前是勾選併入的，刪除後輸出就不再包含它。' : ''}`)) return
+        if (this.unlocked && !f.staged) {            // 解鎖編輯刪「已生效」的檔：只在本機標記，存檔才真的刪（放棄修改＝回原狀）
+          if (!this.specPendingDelete.includes(f.id)) this.specPendingDelete = [...this.specPendingDelete, f.id]
+          this.q.mergeFiles = (this.q.mergeFiles || []).filter(id => id !== f.id)
+          this.setDirty()
+          return
+        }
         try {
           const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files/${encodeURIComponent(f.id)}`, {
             method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
           const d = await r.json().catch(() => ({}))
           if (!r.ok) { alert(d.detail || '刪除失敗'); return }
           this.specFiles = d.specFiles || this.specFiles.filter(x => x.id !== f.id)
+          if (f.staged) this.specStaged = Array.isArray(d.staged) ? d.staged : this.specStaged.filter(x => x.id !== f.id)
           this.q.mergeFiles = (this.q.mergeFiles || []).filter(id => id !== f.id)   // 伺服器同交易已移除；本機未存的勾選保留其餘
-          this._refreshUpdatedAt && this._refreshUpdatedAt()     // 伺服器改了單據內容：換樂觀鎖基準，避免下次存檔 409
+          if (!f.staged) this._refreshUpdatedAt && this._refreshUpdatedAt()     // 伺服器改了單據內容：換樂觀鎖基準，避免下次存檔 409
         } catch (e) { alert('刪除失敗：' + e.message) }
       },
       async previewSpec(f) {
@@ -4492,9 +4533,14 @@
         this.isNewRecord = false
 
         const wasUnlocked = this.unlocked
-        if (wasUnlocked) this.q._isUnlockEdit = true
+        if (wasUnlocked) {
+          this.q._isUnlockEdit = true
+          const sc = this._specChangesPayload()
+          if (sc) this.q._specChanges = sc          // 解鎖編輯的規格文件異動：與 _isUnlockEdit 同層，伺服器消費後不存進 data_json
+        }
         const ok = await this.apiSave(wasNew).catch(() => false)
         delete this.q._isUnlockEdit
+        delete this.q._specChanges
         if (!ok) {
           if (this._saveConflict) {
             alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。\n請按畫面上方橫幅的「載入最新版，保留我的修改」（只換掉您沒改過的欄位），確認後再儲存。')
@@ -4504,6 +4550,7 @@
           return
         }
         this.isDirty = false
+        if (wasUnlocked && (this.specStaged.length || this.specPendingDelete.length)) await this._reloadSpecFilesAfterSave()
         if (this.unlocked) this.unlocked = false
         const now = new Date()
         this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
@@ -5451,6 +5498,7 @@
             this.unlocked = true
             this.showUnlockModal = false
             this.unlockPwd = ''
+            this._discardStagedSpecs()      // 上次解鎖沒收尾（關頁／斷線）留下的暫存檔一併清掉
           } else {
             const d = await res.json().catch(() => ({}))
             this.unlockError = d.detail || '解鎖密碼不正確'
@@ -5462,12 +5510,27 @@
         }
       },
 
+      // 解鎖存檔成功後：暫存檔已轉正、待刪檔已刪——以伺服器為準重取規格檔清單與勾選
+      async _reloadSpecFilesAfterSave() {
+        this._specClearLocal()
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const row = await r.json()
+          this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+          this.q.mergeFiles = Array.isArray(row.data?.mergeFiles) ? row.data.mergeFiles : []
+          this._lastUpdatedAt = row.updated_at || this._lastUpdatedAt
+          this._fpSaved = this._fpNow()
+        } catch (_e) {}
+      },
+
       async cancelUnlock() {
         // 「重新鎖定」／「取消解鎖」要真的鎖回去（原本只關彈窗，unlocked 沒有還原）。有未存的修改 ⇒ 先確認，確認後載回伺服器版（不留「鎖住卻顯示改過的值」）
-        if (this.unlocked && this.isDirty) {
-          if (!confirm('重新鎖定會放棄尚未儲存的修改，確定嗎？')) return
+        if (this.unlocked && (this.isDirty || this.specStaged.length || this.specPendingDelete.length)) {
+          if (!confirm('重新鎖定會放棄尚未儲存的修改（含新上傳／待刪除的規格文件），確定嗎？')) return
           await this.reloadLatestAfterConflict()
           if (this.isDirty) return      // 載入失敗：保持解鎖、修改仍在畫面上（reloadLatestAfterConflict 已提示）
+          await this._discardStagedSpecs()
           this.toast('已放棄未儲存的修改')
         }
         this.unlocked = false
@@ -5822,6 +5885,7 @@
               this.q.signedLog = row.signed_log || []
               this.q.signedFiles = row.signed_files || []
               this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+              this._specClearLocal()
               this.salesEmailSource = ''      // 既有報價單：業務員資料照存檔的快照，不顯示「尚未設定公司信箱」提醒
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']
