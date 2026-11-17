@@ -1067,7 +1067,7 @@
     </div>
     <div class="save-indicator">
       <div class="save-dot" :style="isDirty ? 'background:var(--warning)' : 'background:var(--success)'"></div>
-      <span x-text="isDirty ? '未儲存的變更' : lastSaved ? '已儲存 ' + lastSaved : '草稿已儲存'"></span>
+      <span x-text="isDirty ? '未儲存的變更' : lastSaved ? '已儲存 ' + lastSaved : ((unlocked || (q.status && q.status !== '草稿')) ? '已儲存' : '草稿已儲存')"></span>
       <span style="margin-left:10px;padding:2px 7px;border-radius:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif"
             :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
             :title="backendOnline ? '後端 API 正常' : '後端離線，僅 localStorage 備份'"
@@ -1137,6 +1137,7 @@
       </template>
       <template x-if="(q.status === '已送出' || isPendingStatus()) && unlocked">
         <button class="btn btn-ghost btn-sm" @click="cancelUnlock()" data-testid="qf-relock"
+                title="有未儲存的修改時，會先儲存再重新鎖定；要捨棄修改請按橫幅上的「放棄修改」"
                 style="border-color:#FCA5A5;color:#DC2626;background:#FFF1F2">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
           重新鎖定
@@ -1157,7 +1158,7 @@
       </template>
       <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="!isStatusLocked() && !hb.on && !reviewEditing && !isApproverLocked()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-        <span x-text="unlocked ? '儲存修改' : '儲存草稿'"></span>
+        <span x-text="(unlocked || (q.status && q.status !== '草稿')) ? '儲存修改' : '儲存草稿'"></span>
       </button>
       <button x-show="!q.quoteNo" class="btn btn-ghost btn-sm" @click="openPreview('external')"
               title="預覽報價單格式（儲存後可正式匯出）">
@@ -1353,7 +1354,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2"><path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
         <div style="flex:1">
           <div style="font-size:12px;font-weight:600;color:#92400E">已解鎖 · 可修改內容</div>
-          <div style="font-size:11px;color:#B45309;margin-top:2px">修改完成後請點「儲存修改」，儲存後自動重新鎖定</div>
+          <div style="font-size:11px;color:#B45309;margin-top:2px">修改完成後請按「儲存修改」或「重新鎖定」，兩者都會先儲存再鎖定；不要這次的修改請按「放棄修改」</div>
         </div>
         <button class="btn btn-sm" style="background:#fff;color:#92400E;border:1px solid #FDE68A;pointer-events:auto !important"
                 @click.stop="saveDraft()">
@@ -1361,8 +1362,8 @@
           儲存修改
         </button>
         <button class="btn btn-sm" style="background:#fff;color:#6B7280;border:1px solid #D1D5DB;pointer-events:auto !important"
-                @click.stop="cancelUnlock()">
-          取消解鎖
+                @click.stop="discardUnlockEdit()" data-testid="qf-discard-unlock-edit" title="捨棄尚未儲存的修改並重新鎖定">
+          放棄修改
         </button>
       </div>
 
@@ -2719,7 +2720,9 @@
   // V3.45（2026-11-13，fix/superadmin-approver-edit-entry）：最高管理者（含「同時是當層簽核人」）開著待審核／簽核中的單，工具列出現「解鎖編輯」入口（原本完全沒有）；
   //   解鎖後欄位真的可編輯；「重新鎖定」鈕真的鎖回去；送審人看到的唯讀橫幅多一行「要修改請先按『收回草稿』」。
   //   解鎖確認彈窗／提示改為「存檔後，已簽的層需重新簽核，並通知他們；送審人維持○○○」（fix/unlock-edit-keep-requester：後端送審人維持原送審人、editedBy 記改內容的人、已簽者收到通知）。
-  const FORM_VERSION = 'V3.50'
+  // V3.51（2026-11-17，fix/quote-relock-saves）：解鎖編輯中按「重新鎖定」：有未儲存的修改 ⇒ 走與「儲存修改」相同的儲存（saveDraft，成功才鎖回去；失敗維持解鎖並保留修改），不再直接丟掉修改；
+  //   橫幅原本的「取消」鈕改為「放棄修改」（確認後捨棄修改並鎖定）；saveDraft 回傳成功／失敗並防重入（連按不重複儲存／通知）；非草稿單不再顯示「儲存草稿」「草稿已儲存」字樣。
+  const FORM_VERSION = 'V3.51'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -4148,10 +4151,19 @@
         this.isDirty = true     // 草稿等狀態：dealTag 隨之後的整份存檔一起走
       },
 
+      // 回傳 true＝內容已在伺服器上（存成功，或內容與上次存的一樣不需再存）；false＝沒存成（被擋、使用者取消、存檔失敗、正在存）。
+      // 「重新鎖定」靠這個回傳值決定能不能鎖回去（沒存成就不能鎖，否則畫面上的修改會被丟掉）。
+      // 同一時間只跑一次：連按兩下「儲存修改」／「重新鎖定」不會送兩次 PUT、也不會重複通知。
       async saveDraft() {
-        if (this.isStatusLocked() && !this.isNewRecord) { const b = this.statusLockedBanner(); this.toast(b ? b.title + b.how : '這張單目前不能存檔'); return }
-        if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
-        if (this._taxBasisBlocksSubmit(this.unlocked ? '待審核' : this.q.status)) return
+        if (this._savingDraft) return false
+        this._savingDraft = true
+        try { return await this._saveDraftRun() } finally { this._savingDraft = false }
+      },
+
+      async _saveDraftRun() {
+        if (this.isStatusLocked() && !this.isNewRecord) { const b = this.statusLockedBanner(); this.toast(b ? b.title + b.how : '這張單目前不能存檔'); return false }
+        if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return false
+        if (this._taxBasisBlocksSubmit(this.unlocked ? '待審核' : this.q.status)) return false
         // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
         // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
         // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
@@ -4162,7 +4174,7 @@
           history.replaceState(null, '', '?id=' + this.q.quoteNo)
         }
         if (this.ohDeviates() && this.session.role === 'superadmin' && !this.ohSettled() && this._ohConfirmed !== this.ohPct()) {
-          if (!confirm('管銷分攤比率為 ' + this.ohPct() + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要儲存嗎？')) return
+          if (!confirm('管銷分攤比率為 ' + this.ohPct() + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要儲存嗎？')) return false
           this._ohConfirmed = this.ohPct()
         }
         // 內容跟上次存的一模一樣：不再送一次 PUT（每送一次都多一筆稽核、更新時間往前跳，也會讓別人開著的畫面撞版本衝突）。解鎖編輯照存（會重跑簽核）。
@@ -4170,7 +4182,7 @@
           this.isDirty = false
           clearTimeout(this.autoSaveTimer)
           this.toast('內容沒有變更，不需要重複儲存。')
-          return
+          return true
         }
         const wasNew = this.isNewRecord
         this.isNewRecord = false
@@ -4185,18 +4197,19 @@
           } else {
             alert('儲存失敗：' + this._saveFailReason())
           }
-          return
+          return false     // 失敗：unlocked 與畫面上的修改都原樣保留
         }
         this.isDirty = false
-        if (this.unlocked) this.unlocked = false
+        if (this.unlocked) { this.unlocked = false; this.showUnlockModal = false; this.unlockPwd = ''; this.unlockError = '' }
         const now = new Date()
         this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
         const msg = document.createElement('div')
-        msg.textContent = wasUnlocked ? '✓ 報價單已修改儲存，重新鎖定' : '✓ 草稿已儲存'
+        msg.textContent = wasUnlocked ? '✓ 報價單已修改儲存，重新鎖定' : ((this.q.status && this.q.status !== '草稿') ? '✓ 修改已儲存' : '✓ 草稿已儲存')
         msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);letter-spacing:.02em'
         document.body.appendChild(msg)
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2200)
         await this.checkAndCreateCustomer()
+        return true
       },
 
       openPreview(mode) {
@@ -5142,14 +5155,30 @@
         }
       },
 
+      // 「重新鎖定」（2026-11-17）：沒有未存的修改 ⇒ 直接鎖回去；有 ⇒ 走跟「儲存修改」同一條 saveDraft()（同樣的驗證、稽核、通知），
+      // 成功（saveDraft 內已鎖回去）才算完成；失敗就維持解鎖、修改留在畫面上（saveDraft 已顯示原因）。不在這裡另寫儲存、也不先把 unlocked 設成 false：
+      // saveDraft 要靠 unlocked 判斷走解鎖編輯的 PUT（_isUnlockEdit）、並且不套用「內容沒變就不送」的短路。
+      // 想捨棄修改的人用「放棄修改」（discardUnlockEdit）。
       async cancelUnlock() {
-        // 「重新鎖定」／「取消解鎖」要真的鎖回去（原本只關彈窗，unlocked 沒有還原）。有未存的修改 ⇒ 先確認，確認後載回伺服器版（不留「鎖住卻顯示改過的值」）
         if (this.unlocked && this.isDirty) {
-          if (!confirm('重新鎖定會放棄尚未儲存的修改，確定嗎？')) return
+          await this.saveDraft()
+          return
+        }
+        this._lockNow()
+      },
+
+      // 「放棄修改」：明確捨棄尚未儲存的修改並鎖回去。有未存的修改 ⇒ 先確認，確認後載回伺服器版（不留「鎖住卻顯示改過的值」）
+      async discardUnlockEdit() {
+        if (this.unlocked && this.isDirty) {
+          if (!confirm('放棄尚未儲存的修改並重新鎖定？放棄後無法復原。')) return
           await this.reloadLatestAfterConflict()
           if (this.isDirty) return      // 載入失敗：保持解鎖、修改仍在畫面上（reloadLatestAfterConflict 已提示）
           this.toast('已放棄未儲存的修改')
         }
+        this._lockNow()
+      },
+
+      _lockNow() {
         this.unlocked = false
         this.showUnlockModal = false
         this.unlockPwd = ''
