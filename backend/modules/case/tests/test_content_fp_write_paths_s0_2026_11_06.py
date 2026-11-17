@@ -73,6 +73,7 @@ FUNNEL_CALLS = {
     "modules/case/api/material_orders.py": 2,
     "modules/case/api/quotations.py": 24,      # S3b：approve 對帳後狀態被重算時用漏斗存（+1）；S4：review-edit 存檔（+1）
     "modules/case/api/settlement_api.py": 1,
+    "modules/case/api/quotation_specs.py": 1,      # 備註事項 B：刪規格檔時同步拿掉 data_json.mergeFiles 的 id（走漏斗、維持 updated_at）
 }
 
 # ── 指紋排除清單（提案 §H1 的 denylist；**未知鍵一律算內容**）─────────────────────────────────
@@ -92,7 +93,7 @@ EXCLUDED_PROPOSED = frozenset({
     "docType",                 # 估價單（2026-11-13）：單據類型，讀取時由資料庫欄位注入、開立後不可改（同 status）；待 K 審
 })
 #: 請求暫存欄位：寫入前 `q.pop(...)`，不會進 data_json；列在這裡只是讓掃描器的歸類表完整
-TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit"})
+TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit", "_specChanges"})
 EXCLUDED_KEYS = EXCLUDED_SPEC | EXCLUDED_TIMESTAMPS | EXCLUDED_PROPOSED
 
 #: 伺服器會寫、且**判定為內容**的頂層鍵（排除清單之外的一律如此；這裡只是明示歸類）
@@ -100,6 +101,8 @@ CONTENT_KEYS = frozenset({
     "caseRecord", "customFields", "items", "tot", "overheadPct", "quoteNo", "quoteDate", "locationId",
     "settlement", "taxBasis", "historical", "altPicks", "altTexts",
     "salesPerson", "salesPersonUsername", "salesPhone",   # 2026-11-17 解鎖編輯改報價人：伺服器依帳號重帶（_resolve_unlock_quoter）；報價人是簽核人要審視的內容，維持從嚴算內容（行為與未歸類時相同）
+    "extraNotes",   # 備註事項（2026-11-17）：印在送給客戶的 PDF 最後一頁＝內容，改了已簽的簽核要作廢
+    "mergeFiles",   # 併入輸出的規格文件 id（有序）：決定客戶收到的 PDF 後面接什麼＝內容（2026-11-17）
 })
 #: K 審（§I4）裁定**維持從嚴算內容**：`rejection` 只在離開簽核範圍時寫；`dealTag` 先這樣，等影子模式（§H6-1④）一週的
 #: 「來源區塊」統計，若佔比高再改列排除（改清單要同步改 `content_fp.EXCLUDED_KEYS` 與本檔）
@@ -284,7 +287,7 @@ def test_save_quotation_json_call_sites_are_pinned():
     assert _funnel_call_counts() == FUNNEL_CALLS, (
         "save_quotation_json 呼叫點變了：新增呼叫端走漏斗＝安全（S3 的寫後掛鉤會涵蓋），但請更新 FUNNEL_CALLS；"
         "若是想繞過它另寫 UPDATE，請改到 DIRECT_WRITES 登記並說明理由")
-    assert sum(FUNNEL_CALLS.values()) == 28
+    assert sum(FUNNEL_CALLS.values()) == 29
 
 
 def test_the_funnel_is_the_only_place_with_a_plain_data_json_update_in_quotations_module():

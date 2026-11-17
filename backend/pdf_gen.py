@@ -878,8 +878,59 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '</div>\n'
         '<div class="footer">\n'
         + _identity_foot(_ident) +
-        ('</div>\n</div>\n' + _PS.FIT_A4_MULTI + '\n</body>\n</html>')
+        ('</div>\n</div>\n' + _extra_notes_block(q, _ident, _dlabel, _dno, '六' if terms_section.strip() else '五')
+         + _PS.FIT_A4_MULTI + '\n</body>\n</html>')
     )
+
+
+# ── 備註事項頁（2026-11-17 使用者交辦；設計 docs/platform/plans/QUOTE-EXTRA-NOTES-DESIGN.md §3）───────────────────
+# 簽章之後另起新頁；`extraNotes` 空白 ⇒ 回空字串（不增加任何標籤與樣式，舊單輸出逐位元不變）。
+# 風格＝報價單既有的：段落小標用 `.section-label`、內容放 `.term-item`／`.term-block`（報價條款那種淺米色圓角細框），
+# 不另寫一套顏色字級；只新增「換頁、換行原樣、續頁重複抬頭／頁尾」三件事。
+# 🔴 備註頁放在 `<div id="root">` **外面**：`FIT_A4_MULTI` 以 `#root.scrollHeight` 算縮放，備註頁若在裡面，備註越長
+#    簽章頁就被縮得越小（而且長度不同縮放不同）。放外面 ⇒ 第一頁的版面與沒有備註時完全一樣。
+# 🔑 用真的 `<table>`＋`<thead>`／`<tfoot>`：Chromium 列印只有這個結構會在每一頁重複抬頭與頁尾（實測 `display:table-*` 的 div 不會）。
+#    全域的 `table`／`tbody td`／`tr` 樣式在 `.xn-page` 內全部歸零。
+_EXTRA_NOTES_MAX = 20000
+_EXTRA_NOTES_CSS = (
+    '<style>'
+    '.xn-page{width:100%;margin:0;border-collapse:collapse;break-before:page;page-break-before:always}'
+    '.xn-page>thead>tr>td,.xn-page>tfoot>tr>td,.xn-page>tbody>tr>td{padding:0;border:0;background:none;text-align:left;'
+    'font-size:inherit;vertical-align:top}'
+    '.xn-page>thead>tr>td{padding-top:15mm}'
+    '.xn-page tr{page-break-inside:auto;break-inside:auto}'
+    '.xn-page .terms{page-break-inside:auto;break-inside:auto}'
+    '.xn-page .term-block{white-space:pre-wrap;overflow-wrap:anywhere}'
+    '</style>\n'
+)
+
+
+def _extra_notes_block(q: dict, ident: dict, dlabel: str, dno: str, sec_no: str) -> str:
+    """備註事項頁 HTML（沒填 ⇒ 空字串）。內容一律 HTML 跳脫；換行、空行、「- 」條列由 CSS `pre-wrap` 原樣保留。"""
+    raw = q.get('extraNotes')
+    text = raw if isinstance(raw, str) else ''
+    if not text.strip():
+        return ''
+    text = text.replace('\r\n', '\n').replace('\r', '\n').strip('\n')[:_EXTRA_NOTES_MAX]
+
+    def esc(s):
+        return _html_text(s, falsy_empty=True)
+    head = (
+        '<thead><tr><td><div class="accent-bar"></div>\n<div class="header">\n  <div>\n'
+        + _identity_head(ident, with_demo=False) +
+        '  </div>\n  <div>\n'
+        f'    <div class="doc-title">{"　".join(dlabel)}</div>\n'
+        f'    <div class="co-sub" style="text-align:right;margin-top:6px">{esc(dno)}：{esc(q.get("quoteNo", ""))}</div>\n'
+        '  </div>\n</div></td></tr></thead>\n'
+    )
+    foot = '<tfoot><tr><td><div class="footer">\n' + _identity_foot(ident) + '</div></td></tr></tfoot>\n'
+    body = (
+        '<tbody><tr><td><div class="terms">'
+        f'<div class="section-label" style="margin-bottom:8px">{sec_no}、備註事項</div>'
+        f'<div class="term-item term-item--full"><div class="term-block">{esc(text)}</div></div>'
+        '</div></td></tr></tbody>\n'
+    )
+    return _EXTRA_NOTES_CSS + '<table class="xn-page">\n' + head + foot + body + '</table>\n'
 
 
 def _pdf_audit(quote_no: str, success: bool, detail: str = "", actor: str = "", action_type: str = ""):
@@ -1084,7 +1135,7 @@ def _demo_watermark() -> str:
             'pointer-events:none;z-index:999">' + DEMO_WATERMARK + '</div>\n')
 
 
-def _identity_head(ident: dict) -> str:
+def _identity_head(ident: dict, with_demo: bool = True) -> str:
     """單據抬頭那三行。**縮排與字元逐字保留改版前的樣子**（QL6）。
 
     ⚠️ 第三行的分隔符是**全形空白 ＋ ｜**，不是半形 ——
@@ -1093,7 +1144,7 @@ def _identity_head(ident: dict) -> str:
     third = "統一編號：%s　｜　電話：%s　｜　%s" % (
         _attr(ident.get("tax_id", "")), _attr(ident.get("phone", "")), _attr(ident.get("email", "")))
     require_for_output()                  # 第二道（COMPANY-SETUP-GATE §5）：未設定／判定失敗 ⇒ 428，文件不產生
-    return _demo_watermark() + (
+    return (_demo_watermark() if with_demo else '') + (
         '    <div class="co-name">%s</div>\n'
         '    <div class="co-sub">%s</div>\n'
         '    <div class="co-sub" style="margin-top:4px">%s</div>\n'

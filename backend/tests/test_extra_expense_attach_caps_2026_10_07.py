@@ -130,7 +130,7 @@ def test_other_folders_are_not_capped_by_this_table():
     """上限表只列 case_extra_expense：別的資料夾（例：報價單回簽）沒有數量上限，行為與之前相同。"""
     from fastapi import UploadFile
     from helpers import uploads as U
-    assert set(U.UPLOAD_LIMITS_BY_SUBFOLDER) == {"case_extra_expense"}
+    assert set(U.UPLOAD_LIMITS_BY_SUBFOLDER) == {"case_extra_expense", "quotation_specs"}      # quotation_specs：備註事項 B（2026-11-17）；quotations（回簽）仍無上限
     ups = [UploadFile(filename="s%d.pdf" % i, file=io.BytesIO(_pdf())) for i in range(12)]
     import tempfile
     old = U.UPLOADS_ROOT
@@ -152,7 +152,7 @@ def test_deleting_a_draft_deletes_its_files_and_folder(doc):
     assert _files_on_disk(eid) == [] and not os.path.isdir(_dir(eid)), "草稿刪除後實體檔案與資料夾都清掉（原本會留成孤兒檔）"
 
 
-def test_deleting_a_rejected_doc_also_purges_but_other_docs_keep_their_files(doc, seed_extra_expense):
+def test_deleting_a_rejected_doc_also_purges_but_other_docs_keep_their_files(client, doc, seed_extra_expense):
     client, h, eid = doc
     other = seed_extra_expense(NO, total_cost=2000, description="別張單據", status="草稿")
     assert _upload(client, h, eid, [("y1.pdf", _pdf())]).status_code == 201
@@ -167,7 +167,7 @@ def test_deleting_a_rejected_doc_also_purges_but_other_docs_keep_their_files(doc
     assert len(_files_on_disk(other)) == 1, "只清這一張的檔案，別張單據的不受影響"
 
 
-def test_approved_docs_cannot_be_deleted_so_their_files_stay(doc):
+def test_approved_docs_cannot_be_deleted_so_their_files_stay(client, doc):
     client, h, eid = doc
     assert _upload(client, h, eid, [("k1.pdf", _pdf())]).status_code == 201
     import db
@@ -189,7 +189,7 @@ def test_purge_helper_ignores_paths_outside_uploads(tmp_path):
     assert n == 0 and victim.exists()
 
 
-def test_change_request_upload_counts_official_plus_pending_files(doc):
+def test_change_request_upload_counts_official_plus_pending_files(client, doc):
     """核准後的變更申請：待核准附件核准後會併進正式清單 ⇒ 正式（8）＋待核准（2）合計不可超過 10。"""
     client, h, eid = doc
     import db

@@ -26,6 +26,21 @@
 - **（併入）(next) — 2026-11-17（feat/quote-alt-plan-totals；T88 擇一方案未選完時列各方案金額；版號由列車取）**
 - 行為變更（有意，使用者 2026-11-17 裁示）：擇一方案的單還有未選定的組、且「合計依方案選擇」有勾時，客戶版 PDF／預覽／內部列印的「合計」區由原合計框改為「各方案金額」小表（方案／品項小計／［稅前合計］／營業稅／總計；有共同品項時註明「各方案皆含共同品項 NT$ X」）；兩組以上列各種搭配（≤ `combo_view_max`，超過改分組列各選項金額）。客戶選定後、總開關沒開、沒有擇一品項的單，輸出逐位元不變。API、資料欄位、權限語意不變。
 - 內部：`alt_view.view()` 回傳多一個 `plans` 鍵（客戶版，只用 `server_totals`／`item_amount`，不含成本毛利；算不出來時為 None，`pdf_gen` 退回原合計框）；`pdf_gen` 合計區新增 `_alt_plans_html`。舊測試兩支有意改寫，見 `docs/quick/changelog.md` 2026-11-17 T88。
+- **（併入）(next) — 2026-11-17（feat/quote-extra-notes-page＋feat/quote-spec-pdf-merge；報價單／估價單「備註事項」A＋規格 PDF 併入 B（含規格文件面板、mergeFiles 存檔驗證）＋解鎖編輯可傳規格檔（含前端、預檢修正；`_specChanges` 僅解鎖存檔接受）；版號由列車取）**
+- 新增（行為：只有填了備註的單才有變化）：報價單／估價單多一個選填欄位 `extraNotes`（純文字、上限 20,000 字）。有填才在簽章之後另起新頁輸出「備註事項」（沿用條款樣式，續頁重複抬頭與頁尾，客戶版／內部版／估價單同一套）；沒填時 PDF 與舊單逐位元相同。換行、空行、縮排與「- 」條列原樣保留（HTML 跳脫）。
+- 新增（API）：`GET /api/settings/quote-notes-templates`（登入可讀）、`PUT`（僅最高管理者；驗證名稱／內容必填、名稱不可重複、最多 100 個、每個 20,000 字；寫稽核 `settings.quote_notes_templates.update` 並沿用 `quote_terms` 通知）。範本只是清單：套用＝把文字複製進單據，之後改／刪範本不動已開立的單。
+- 行為：備註事項列入編修紀錄與簽核變更註記（顯示字數）；簽核佇列詳情多一列備註全文與「變更項目」，且只列備註相關變更（不帶利潤率等財務欄位）；內容指紋把備註算內容（改了備註，已簽的簽核判過期）。
+- 前端：quotation-form 新增「七、備註事項」區塊（字數計數、套用範本：框內已有字時問取代／接在後面；範本超過 10 個才出現分類篩選與搜尋；最高管理者可「管理範本」，含「以目前備註內容新增」）；FORM_VERSION V3.51。
+- **（併入）(next) — 2026-11-17（feat/quote-spec-pdf-merge；備註事項 B：規格 PDF 併入；版號由列車取）**
+- 新增（**欄位**）：case migration 0013——`quotations.spec_files_json TEXT NOT NULL DEFAULT '[]'`（每筆 `{id,name,path,size,pages,status,uploadedAt,uploadedBy}`；`status`＝ok／encrypted／broken／empty）。只進不退：舊程式不認得這一欄也能跑（回滾不必動資料庫；整列 `SELECT *` 轉 dict 的地方只會多一個鍵）。
+- 新增（API）：`POST /api/quotations/{no}/spec-files`（多檔、僅 PDF；單檔不合格列在 `rejected`、不拖垮整批；上限 10 檔／單檔 20MB／合計 50MB）、`DELETE /api/quotations/{no}/spec-files/{id}`（刪檔＋清單＋`data_json.mergeFiles` 同一個寫交易，commit 之後才刪實體檔）。狀態鎖同 PUT 報價單（待審核／簽核中／已送出／已成案／已結案／已拒絕一律 403）；不動 `updated_at`。
+- 新增（輸出）：`GET /api/quotations/{no}` 多頂層 `specFiles`（不含路徑）；`pdf-download` 與背景存檔版 PDF 依 `data_json.mergeFiles` 把規格 PDF 併在本體之後（加密／壞檔／零頁／檔案遺失／超頁（300）／超量（50MB）略過、本體永遠保留、略過原因**不印進 PDF**——下載端點放 `X-Pdf-Merge-Skipped` 標頭，版本紀錄放 `docVersions[].mergeSkipped`）；沒選＝輸出逐位元不變。
+- 附件目錄：新來源類型 `quotation_spec`（資料夾 `uploads/quotation_specs/`，讀取規則同案件頁可讀）；回收筒快照／還原認得 `spec_files_json`。
+- 內部：`modules/case/pdf_merge.py`（純函式併檔；放在 case 模組內不升核心，**下次升核心版時評估收斂為 L1**；`docs/platform/modules.json` 已登記 `mod:case/pdf_merge`、`mod:case/api/quotation_specs`）；`case.doc_version` 提供者改指 `quotation_specs.record_doc_version_with_merge`（先併檔、再呼叫原 `_record_doc_version`）。
+- 新增（解鎖編輯期間可上傳／刪除規格檔，使用者裁示 2026-11-17）：鎖定狀態（待審核／簽核中／已送出／已成案／已結案）下，**最高管理者且有解鎖驗證證明**（`verify-unlock` 寫的 `quotation.unlock` 稽核列，本人＋本單＋12 小時內；PUT 本身只驗身分，規格檔多這一道）才能傳＝**暫存**（`spec_files_json` 項目帶 `staged:{by,at}`，不進清單／檔案中心／合併／mergeFiles）；已生效的檔在解鎖中不能由 DELETE 刪（403，畫面標待刪）。`PUT /api/quotations/{no}` 的 `data._specChanges={add:[暫存id],remove:[id]}`（只收 `_isUnlockEdit`＋最高管理者，否則 400；不存進 data_json）在**同一個寫入交易**套用：暫存轉正、待刪移除、本人其餘暫存丟掉，實體檔 commit 之後才刪；套用後 ≤10 檔／≤50MB，`mergeFiles` 以套用後清單驗證；寫入 editHistory（解鎖那筆的 `changes`＝`規格文件`）與稽核 `quotation.apply_spec_changes`。新端點 `POST /api/quotations/{no}/spec-files/discard-staged`（放棄修改：清本人暫存，冪等；不需解鎖證明）；暫存 24 小時後由下一次碰規格端點的人懶清掃。上傳／刪除回應多 `staged`（本人暫存清單）。稽核：`quotation.stage_spec_files`／`quotation.discard_spec_files`／`quotation.apply_spec_changes`。
+- 新增（前端，表單 V3.51）：解鎖編輯中規格文件面板可用——新上傳的檔標「待儲存」、已生效的檔按刪除只標「待刪除」（可「還原」）；按「儲存修改」才送 `data._specChanges`（`add`／`remove`）並重新送簽，按「重新鎖定」或放棄修改會呼叫 `discard-staged` 並回到原狀；剛解鎖時也先清一次上次沒收尾的暫存檔。鎖定且未解鎖時（待審核／簽核中也算）面板整個停用。
+- ⚠️ 已知缺口（既有，T88 不擴大範圍，PM 記入下一班待辦）：`PUT /api/quotations/{no}` 的解鎖編輯（`_isUnlockEdit`）伺服器端**只檢查角色是最高管理者**，不核對個人解鎖密碼；`verify-unlock` 只是畫面流程、伺服器不留解鎖狀態，所以最高管理者直接帶 `_isUnlockEdit` 即可繞過解鎖密碼。**規格檔這條路徑（暫存上傳、套用 `_specChanges`）刻意比 PUT 嚴**：要求 `audit_log` 有本人、本單、12 小時內的 `quotation.unlock`（`verify-unlock` 通過才寫）。
+- 前端：無（由 h15 接）。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。

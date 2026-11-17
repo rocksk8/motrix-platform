@@ -359,6 +359,10 @@
    "count": 1,
    "reason": "tmp: 報表 PDF 暫存檔"
   },
+  "modules/case/api/quotation_specs.py": {
+   "count": 1,
+   "reason": "tmp: 存檔版 PDF 就地併入規格文件時的 .merge.tmp 暫存檔（併檔失敗時清掉；使用者的附件刪除走 helpers.uploads.remove_physical_file）"
+  },
   "modules/case/api/quotations.py": {
    "count": 1,
    "reason": "tmp: 已決定申請殘留的 _pending_case_changes/{id} 空暫存目錄（每日清掃；檔案本身走 purge_document_files）"
@@ -401,6 +405,7 @@
   "modules/case/api/quotations.py::delete_material_invoice_file::DELETE /api/quotations/{no}/materials/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_payment_item_invoice_file::DELETE /api/quotations/{no}/payment/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_quotation_signed_file::DELETE /api/quotations/{quote_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
+  "modules/case/api/quotation_specs.py::delete_spec_file::DELETE /api/quotations/{quote_no}/spec-files/{file_id}": "p2: 附件單檔刪除（規格 PDF；單據本身進暫存區時附件跟著，見 recycle_adapter 的 spec_files_json；單檔刪除之後評估）",
   "modules/crm/api.py::delete_dev_log::DELETE /dev-logs/{log_id}": "p2: 其他業務資料（P2 評估）",
   "modules/crm/api.py::delete_dev_log_file::DELETE /dev-logs/{log_id}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/daily_tasks/api.py::delete_daily_task::DELETE /api/daily-tasks/{task_id}": "p2: 其他業務資料（P2 評估）",

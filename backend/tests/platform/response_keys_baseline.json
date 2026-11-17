@@ -6145,6 +6145,7 @@
    "signed_by",
    "signed_files",
    "signed_log",
+   "specFiles",
    "status",
    "total",
    "updated_at",
@@ -6429,6 +6430,7 @@
    "quotation.signed_by",
    "quotation.signed_files",
    "quotation.signed_log",
+   "quotation.specFiles",
    "quotation.status",
    "quotation.total",
    "quotation.updated_at",
@@ -8275,6 +8277,12 @@
    "live.path",
    "live.reason",
    "live.state"
+  ],
+  "s": 200
+ },
+ "/api/settings/quote-notes-templates": {
+  "k": [
+   "templates"
   ],
   "s": 200
  },

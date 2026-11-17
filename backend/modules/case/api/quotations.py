@@ -96,6 +96,7 @@ from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送�
 from helpers.uploads import _effective_subfolder
 from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
+from modules.case.api.quotation_specs import validate_merge_files as _validate_merge_files, merge_or_keep as _merge_specs, public_spec_files as _public_spec_files, skipped_header as _spec_skipped_header, normalize_spec_changes as _norm_spec_changes, spec_files_after as _spec_files_after, apply_spec_changes as _apply_spec_changes   # 規格 PDF 併入（備註事項 B）；該檔頂層不 import 本檔
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base, build_quote_preview_html,
@@ -148,6 +149,8 @@ _TRACKED_QUOTE_FIELDS = [
     ("notes",             "備註"),
     ("columnLabels.item",  "欄名（品名 / 規格說明）"),   # 沒有＝預設名稱；改了在編輯紀錄看得到
     ("columnLabels.brand", "欄名（廠牌 / 型號）"),
+    ("extraNotes",        "備註事項"),          # 報價單／估價單最後一頁的備註事項（2026-11-17）；顯示成字數，不截斷內文
+    ("mergeFiles",        "併入輸出的規格文件"),  # 併入 PDF 的規格檔 id（有序）；顯示成「N 個檔」，檔名不進註記（2026-11-17）
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
     ("contract.contactPerson",   "聯絡人"),
@@ -184,6 +187,15 @@ def _fmt_change_value(v) -> str:
     return text if len(text) <= 60 else text[:57] + "…"
 
 
+#: 簽核佇列詳情可以原樣顯示的變更摘要欄位名（非財務；會印給客戶看的內容）
+_APPROVER_VISIBLE_CHANGE_FIELDS = ("備註事項", "併入輸出的規格文件")
+
+
+def _fmt_notes_size(v) -> str:
+    """備註事項在變更註記裡的寫法：「N 字」；沒填＝「（空白）」。"""
+    return f"{len(v)} 字" if isinstance(v, str) and v.strip() else "（空白）"
+
+
 def _summarize_quote_changes(old: dict, new: dict) -> list:
     """回傳 [{field, from, to}]；沒有任何可辨識的變更時回傳 []。
 
@@ -194,7 +206,17 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
     changes = []
     for path, label in _TRACKED_QUOTE_FIELDS:
         o, n = _dig(old, path), _dig(new, path)
+        if path == "mergeFiles":            # 沒有／空陣列視為相同；等數但內容或順序不同要講出來（只看個數會誤以為沒變）
+            o, n = (o if isinstance(o, list) else []), (n if isinstance(n, list) else [])
+            if o == n:
+                continue
+            note = "" if len(o) != len(n) else "（內容或順序已變更）"
+            changes.append({"field": label, "from": f"{len(o)} 個檔", "to": f"{len(n)} 個檔{note}"})
+            continue
         if o == n:
+            continue
+        if path == "extraNotes":            # 長文：顯示字數（截 60 字沒有資訊量）；改了什麼內容看 PDF 版本存檔
+            changes.append({"field": label, "from": _fmt_notes_size(o), "to": _fmt_notes_size(n)})
             continue
         changes.append({"field": label,
                         "from": _fmt_change_value(o),
@@ -225,6 +247,8 @@ def _diff_view(d: dict) -> dict:
     ② 款項日期：只在 PUT 才正規化。
     使用者真的改了、而且會被存下來的值（頂層未追蹤欄位、款項金額…）仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）、不改輸入。"""
     out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
+    if not out.get("mergeFiles"):            # 沒有／空陣列同義（伺服器存檔時空的會丟鍵）：不算「其他內容」變更
+        out.pop("mergeFiles", None)
     cr = out.get("caseRecord")
     if isinstance(cr, dict):
         cr = {k: v for k, v in cr.items() if k != "stages"}
@@ -1739,6 +1763,7 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
                 result["approveReview"] = _ar
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
+    result["specFiles"] = _public_spec_files(result.pop("spec_files_json", None))     # 規格文件清單（不含路徑；備註事項 B）
     result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
     # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
     # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
@@ -1982,6 +2007,49 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     return {"ok": True}
 
 
+#: 備註事項字數上限（純文字；與 pdf_gen._EXTRA_NOTES_MAX 同值，那邊是輸出時的最後一道截斷，這裡是存檔時的伺服器強制）
+EXTRA_NOTES_MAX = 20000
+
+
+def _check_extra_notes(q: dict) -> None:
+    """`extraNotes`（備註事項）存檔前檢查：非字串一律當沒填（丟掉鍵）、全空白＝沒填（丟掉鍵，舊單維持沒有這個鍵）、
+    超過上限 ⇒ 400（不靜默截斷：使用者以為印出去的是全文）。內容原樣保留（換行、縮排、「- 」條列），不 strip 中間。"""
+    if "extraNotes" not in q:
+        return
+    v = q.get("extraNotes")
+    if not isinstance(v, str) or not v.strip():
+        q.pop("extraNotes", None)
+        return
+    if len(v) > EXTRA_NOTES_MAX:
+        raise HTTPException(400, f"備註事項過長（{len(v)} 字），上限 {EXTRA_NOTES_MAX} 字")
+
+
+def _check_merge_files(q: dict, quote_no=None, spec_override=None) -> None:
+    """`mergeFiles`（併入輸出的規格文件 id，有序）存檔前檢查：只能引用**這張單自己**的規格檔（新單沒有 ⇒ 一律清空）；
+    清理（去重、丟掉已刪／別張單的 id）與格式錯誤的 400 由 `quotation_specs.validate_merge_files` 決定；
+    清理後是空的就不存這個鍵（與 extraNotes 同習慣：舊單與沒用這功能的單 data_json 不多任何鍵）。"""
+    if "mergeFiles" not in q:
+        return
+    if q.get("mergeFiles") is None:
+        q.pop("mergeFiles", None)
+        return
+    spec = "[]"
+    if spec_override is not None:                          # 解鎖存檔帶 `_specChanges`：以「套用後」的清單驗證（被標待刪的 id 丟掉、剛暫存要轉正的認得）
+        spec = spec_override
+    elif quote_no:
+        _c = get_db()
+        try:
+            _r = _c.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            spec = (_r["spec_files_json"] if _r else "[]") or "[]"
+        finally:
+            _c.close()
+    ids = _validate_merge_files(q.get("mergeFiles"), spec)
+    if ids:
+        q["mergeFiles"] = ids
+    else:
+        q.pop("mergeFiles", None)
+
+
 def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
     modules/case/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
@@ -2045,6 +2113,9 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
     _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
+    q.pop("_specChanges", None)                # 解鎖存檔專用的暫存動作；建單／歷史建單不接受（不可原樣存進 data_json）
+    _check_extra_notes(q)
+    _check_merge_files(q)
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     q["docType"] = _DT.norm(q.get("docType"))    # 先定類型：欄名清理與送簽註記要看它（下面開立時同一個值）
@@ -2463,6 +2534,9 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         q["caseRecord"].pop("customFields", None)
     _quote_custom_fields_gate(q, None)
     validate_quote_tax(q)
+    q.pop("_specChanges", None)                # 解鎖存檔專用的暫存動作；建單／歷史建單不接受（不可原樣存進 data_json）
+    _check_extra_notes(q)
+    _check_merge_files(q)
     validate_tax_basis(q, "已送出")
     q.pop("clauseTitles", None)
     _QIN.clean_items(q)
@@ -2591,7 +2665,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # consume unlock-edit flag before any processing
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
+    _spec_raw = q.pop("_specChanges", None)                # 解鎖編輯期間對規格文件的暫存動作（上傳／標待刪）；只在這次存檔才生效，不存進 data_json
+    _spec_ch = _norm_spec_changes(_spec_raw)
+    if _spec_ch is not None:
+        if not is_unlock_edit or user["role"] != "superadmin":
+            raise HTTPException(400, "規格文件的變更只能隨解鎖編輯存檔（最高管理者）")
+        _spec_after = _spec_files_after(quote_no, _spec_ch, user)
+    else:
+        _spec_after = None
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
+    _check_extra_notes(q)
+    _check_merge_files(q, quote_no, _spec_after)
     # 第 48 班 S2：管銷分攤比率驗證／權限／戳記——放在最前面：開寫入連線與寄簽核通知『之前』就拒絕（422／403），不留連線也不寄信；
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
@@ -2718,6 +2802,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
 
     tot = q.get("tot", {})
 
+    _spec_apply = None
     conn = get_db()
     try:                                 # 任何例外都不可帶著寫鎖漏出連線（先前沒有 finally；各早退路徑自己 close 的照舊）
 
@@ -2790,6 +2875,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                 _hist_row["quoterChange"] = _quoter_change
             _hist.append(_hist_row)
             q["editHistory"] = _hist
+            if _spec_ch is not None:                      # 規格文件：同一個寫交易套用（暫存轉正、待刪移除）；實體檔 commit 之後才刪
+                _spec_apply = _apply_spec_changes(conn, quote_no, _spec_ch, user, now)
+                if _spec_apply:
+                    if _spec_apply["changes"]:
+                        _hist[-1]["changes"] = _spec_apply["changes"]
+                    if "mergeFiles" in q:                 # 寫鎖內重算後再清一次（極罕見：兩次讀之間有人刪了檔）
+                        _ids = _validate_merge_files(q.get("mergeFiles"), _spec_apply["after"])
+                        if _ids:
+                            q["mergeFiles"] = _ids
+                        else:
+                            q.pop("mergeFiles", None)
         try:
             require_case(user, existing, quote_no)
         except HTTPException:
@@ -2969,6 +3065,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             pass
         raise
     conn.close()
+    if _spec_apply:
+        for _f in _spec_apply["unlink"]:                 # commit 之後才刪實體檔（失敗＝留下孤兒檔、不影響資料）
+            _uploads_mod.remove_physical_file(_f)
+        if _spec_apply["changes"]:
+            _audit(_tok(authorization), 'quotation.apply_spec_changes', 'quotation', quote_no,
+                   f"{quote_no}（解鎖存檔套用規格文件變更：{_spec_apply['changes'][0]['to']}）", _spec_apply["detail"])
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
         _audit(_tok(authorization), 'quotation.unlock_edit', 'quotation', quote_no,
@@ -6041,9 +6143,11 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
     q   = body.data
     now = datetime.now().isoformat()
-    for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
+    for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "_specChanges", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
         q.pop(_k, None)
     validate_quote_tax(q)
+    _check_extra_notes(q)
+    _check_merge_files(q, quote_no)
     q["quoteNo"] = quote_no
     conn = get_db()
     try:
@@ -6785,7 +6889,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         _require_money_or_approver(conn, q, user)   # 內部版含成本（CM15）
     # 🔑 QL10：把 `location_id` 一起取出來 —— 列印的稽核要記得下這一次用了哪個據點。
     row  = conn.execute(
-        "SELECT quote_no, location_id FROM quotations WHERE quote_no=?",
+        "SELECT quote_no, location_id, data_json, spec_files_json FROM quotations WHERE quote_no=?",
         (quote_no,)).fetchone()
     conn.close()
     if not row:
@@ -6800,6 +6904,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         tid = trace_id()
         logger.exception("quotation pdf failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
+    pdf_bytes, _merge_skipped = _merge_specs(row, pdf_bytes)      # 備註事項 B：併入使用者選的規格 PDF（沒選＝原樣；本體永遠保留；略過原因只放標頭，不印進 PDF）
     mode_label = "內部版" if internal else "對外版"
     # 🔴🔴 QL10：**讀即時值不做快照**（A 裁定）—— 匯款帳號要回答的是
     #    「**現在**該匯到哪」，舊單據印出舊帳號的話，對方會照著匯到一個
@@ -6823,10 +6928,14 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             # ⚠️ 只記抬頭與帳號**末四碼** —— 完整帳號不進稽核紀錄。
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
-            "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
+            "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None,
+            **({"mergeSkipped": [{"name": str(s.get("name") or "")[:60], "reason": s.get("reason")} for s in _merge_skipped]} if _merge_skipped else {})})
     dn = download_name.build("estimate" if _DT.doc_type_of_no(quote_no) == _DT.ESTIMATE else "quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
                              extra={"variant": "internal"} if internal else None)
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
+    _hdrs = dn.headers()
+    if _merge_skipped:
+        _hdrs["X-Pdf-Merge-Skipped"] = _spec_skipped_header(_merge_skipped)      # URL 編碼的 JSON [{id,name,reason}]；沒略過就不設
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=_hdrs)
 
 
 # ── 單據版本與編輯紀錄查詢（2026-09-14）──────────────────────────────────────
@@ -7516,6 +7625,22 @@ def detail_quotation(conn, doc_no):
         "items": d.get("items") or [],
         "files": files,
     }
+    _xn = d.get("extraNotes")
+    if isinstance(_xn, str) and _xn.strip():     # 備註事項（2026-11-17）：會印在送給客戶的 PDF 最後一頁，簽核人要看得到全文；沒填 ⇒ 不加這一列（舊單回應不變）
+        out["fields"].append({"label": "備註事項（印在報價單最後一頁）", "value": _xn})
+    _mf = d.get("mergeFiles")
+    if isinstance(_mf, list) and _mf:            # 併入輸出的規格文件（2026-11-17）：簽核人要知道「送出去的 PDF 後面還接了哪些檔、什麼順序」
+        _sp = {}
+        try:
+            _row = conn.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
+            _sp = {f.get("id"): f for f in json.loads((_row["spec_files_json"] if _row else "") or "[]") if isinstance(f, dict)}
+        except (sqlite3.OperationalError, TypeError, ValueError):
+            _sp = {}                              # 欄位還沒有（規格文件功能未啟用）或內容壞掉：只列檔數，不擋簽核詳情
+        out["fields"].append({"label": "併入輸出的規格文件（接在報價單後面，依序）", "value": chr(10).join(
+            "%d. %s" % (i + 1, (_sp.get(fid) or {}).get("name") or "（檔案已不存在）") for i, fid in enumerate(_mf) if isinstance(fid, str))})
+        for fid in _mf:
+            if isinstance(fid, str) and fid in _sp:
+                out["files"] += _tagged_file_entries(json.dumps([_sp[fid]], ensure_ascii=False), "規格文件")
     # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
     hist = d.get("editHistory") or []
     if isinstance(hist, list) and hist:
@@ -7526,6 +7651,12 @@ def detail_quotation(conn, doc_no):
                       "時間": last.get("at"), "類型": last.get("type")},
             "before": None,
         }
+        # 🔴 只挑備註事項／併入規格文件這兩種：同一筆摘要還有毛利率、營業利益率等財務欄位（financial_mask 會對沒有財務權限的人遮蔽），
+        #    這裡不可以把整包摘要原樣放給所有簽核人。
+        _lc = [c for c in (last.get("changes") or []) if isinstance(c, dict) and c.get("field") in _APPROVER_VISIBLE_CHANGE_FIELDS]
+        if _lc:     # 簽核人看得到「這次備註／附件改了什麼」，不只知道「有人改過」
+            out["changes"]["after"]["變更項目"] = "；".join(
+                "%s：%s → %s" % (c.get("field"), c.get("from") or "（空）", c.get("to") or "（空）") for c in _lc[:12])
     if isinstance(d, dict) and d:
         # 簽核二擇一 S1b：簽核佇列詳情也給內容指紋（簽核人在佇列頁看到內容的那一刻算），核准時當 expectedFp 帶回。
         # 算在原始（未遮蔽）內容上，與 approve 端點讀到的 data_json 同一份；指紋本身不含任何內容

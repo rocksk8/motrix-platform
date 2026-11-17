@@ -33,6 +33,10 @@
       "module": "case",
       "catalog": "extra_expense"
     },
+    "POST /api/quotations/{quote_no}/spec-files": {
+      "module": "case",
+      "catalog": "quotation_spec"
+    },
     "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files": {
       "module": "case",
       "excluded": "額外支出變更申請的暫存檔：未核准前不是正式檔案，不進目錄（設計 Q6）；核准後併入 extra_expense"

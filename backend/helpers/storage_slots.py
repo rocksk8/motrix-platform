@@ -47,6 +47,7 @@ LOCATION_CODES = dict([
     _L("quotation_materials_invoices", "材料發票", "case"),
     _L("case_updates", "案件動態附件", "case"),
     _L("case_extra_expense", "額外支出", "case"),
+    _L("quotation_specs", "報價單規格 PDF（併入輸出）", "case", managed=False, note="自有上傳端點（暫存／生效／合併上限），不受插槽管理"),
     _L("completion_notes", "完工單簽回", "case"),
     _L("shipping_notes", "出貨單簽回", "supply"),
     _L("invoice_vouchers", "開票申請憑據", "arap"),

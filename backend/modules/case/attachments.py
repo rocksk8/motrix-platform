@@ -6,6 +6,7 @@
 | 來源類型 | 位置 | `doc_no` |
 |---|---|---|
 | quotation_signed | `quotations.signed_files_json` | 案件編號 |
+| quotation_spec | `quotations.spec_files_json`（規格 PDF，備註事項 B；欄位是 `name`、這裡對外補 `filename`／`mime`） | 案件編號 |
 | case_update | `case_updates.files_json`（一個案件多列，併起來） | 案件編號 |
 | payment_item | caseRecord.payment.items[i].invoiceFiles | `案件編號_i` |
 | material | caseRecord.materials[i].files | `案件編號_i` |
@@ -58,7 +59,7 @@ def _items(cr, outer, key):
 
 def _quote_of(conn, source_type, doc_no):
     """這一筆來源屬於哪一張案件；來源不存在 ⇒ None。"""
-    if source_type in ("quotation_signed", "case_update"):
+    if source_type in ("quotation_signed", "quotation_spec", "case_update"):
         return doc_no
     if source_type in _INDEXED:
         return _quote_and_index(doc_no)[0]
@@ -73,7 +74,7 @@ def _quote_of(conn, source_type, doc_no):
 #:   存在報價單上的四類 ⇒ 案件頁 `get_quotation` 的 `case_page_readable`（scope="read"：放行 cashier、不放行 case_manage；AT-M1c）
 #:   case_update   ⇒ 案件動態端點的 `guard_case_access(allow_module="case_manage")` ＝ `case_documents_readable`
 _READ_RULE = {"extra_expense": case_owner_readable,
-              "quotation_signed": case_page_readable, "payment_item": case_page_readable,
+              "quotation_signed": case_page_readable, "quotation_spec": case_page_readable, "payment_item": case_page_readable,
               "material": case_page_readable, "material_invoice": case_page_readable}
 
 
@@ -99,6 +100,8 @@ def _require_readable(conn, source_type, quote_no, user):
 
 class _CaseAttachments:
     LABEL = "案件管理"
+    # ⚠️ 這份是「傳票可帶入的附件」白名單（會計 voucher_attachments.SOURCE_TYPES 逐項比對）：規格 PDF（quotation_spec）不是傳票佐證 ⇒ 不列在這；
+    #    它只進下面的檔案目錄（_CaseCatalog.CATEGORIES）與路徑讀取規則（_CasePathAccess）。
     SOURCE_TYPES = ("quotation_signed", "case_update", "payment_item", "material", "material_invoice",
                     "extra_expense")
 
@@ -112,7 +115,7 @@ class _CaseAttachments:
 
     @staticmethod
     def _docs(conn, source_type, quote_no):
-        if source_type in ("quotation_signed", "case_update"):
+        if source_type in ("quotation_signed", "quotation_spec", "case_update"):
             return [quote_no]
         if source_type in _INDEXED:
             outer, key, _ = _INDEXED[source_type]
@@ -145,6 +148,11 @@ def _read(conn, source_type, doc_no):
     """讀一筆來源的附件 metadata（**不查權限**：只給已查過權限的 `files()` 與只算數字的 `_count()` 用）。"""
     if source_type == "quotation_signed":
         return files_from_json_column(conn, "quotations", "quote_no", doc_no, "signed_files_json")
+    if source_type == "quotation_spec":
+        # `spec_files_json` 的欄位是 name（設計規格）；附件目錄／預覽用 filename／mime ⇒ 對外補上（不改庫內的值）
+        return [dict(f, filename=f.get("name") or "", mime="application/pdf")
+                for f in files_from_json_column(conn, "quotations", "quote_no", doc_no, "spec_files_json")
+                if isinstance(f, dict) and not f.get("staged")]       # 解鎖編輯的暫存項還沒生效：不進檔案中心
     if source_type == "case_update":
         out = []
         for row in conn.execute("SELECT files_json FROM case_updates WHERE quote_no = ?", (doc_no,)):
@@ -186,12 +194,12 @@ class _CasePathAccess:
 
     | 資料夾 | 其餘各段 | 規則 |
     |---|---|---|
-    | quotations／quotation_payment_items／quotation_materials／quotation_materials_invoices／case_updates／case_extra_expense | `單號/檔名` | 同 `_READ_RULE`（附件提供者；可見範圍＝原單據） |
+    | quotations／quotation_specs／quotation_payment_items／quotation_materials／quotation_materials_invoices／case_updates／case_extra_expense | `單號/檔名` | 同 `_READ_RULE`（附件提供者；可見範圍＝原單據） |
     | quotation_settlement_extra（額外支出的舊版資料夾） | `案件編號_舊索引/檔名` | 只綁案件：該案某筆額外支出的 files_json 真的列了這個路徑 ∧ 額外支出的讀取規則 |
     | completion_notes | `完工單號/檔名` | 完工單清單 `guard_case_access(allow_module="case_manage")`＝`case_documents_readable` |
     | _pending_case_changes | `變更id/案件編號_序號/檔名` | 變更申請存在且屬於該案 ∧（申請人本人 ∨ 案件頁規則 `case_page_readable`） |
     """
-    _FOLDER_SOURCE = {"quotations": "quotation_signed", "quotation_payment_items": "payment_item",
+    _FOLDER_SOURCE = {"quotations": "quotation_signed", "quotation_specs": "quotation_spec", "quotation_payment_items": "payment_item",
                       "quotation_materials": "material", "quotation_materials_invoices": "material_invoice",
                       "case_updates": "case_update", "case_extra_expense": "extra_expense",
                       LEGACY_EXTRA_FOLDER: "extra_expense_legacy"}
@@ -220,7 +228,7 @@ class _CasePathAccess:
             row = conn.execute("SELECT quote_no FROM completion_notes WHERE note_no = ?", (key,)).fetchone()
             return bool(row) and case_documents_readable(conn, row["quote_no"], user)
         st = _CasePathAccess._FOLDER_SOURCE.get(folder)
-        if st in ("quotation_signed", "case_update"):
+        if st in ("quotation_signed", "quotation_spec", "case_update"):
             quote_no = key
         elif st in _INDEXED:
             quote_no, idx = _quote_and_index(key)
@@ -248,7 +256,7 @@ class _CasePathAccess:
 
 
 #: 各類檔案存檔時的資料夾（`save_document_files` 第一個參數；路徑 `<資料夾>/<單據鍵>/<檔名>`）
-_CATALOG_FOLDER = {"quotation_signed": "quotations", "case_update": "case_updates", "payment_item": "quotation_payment_items",
+_CATALOG_FOLDER = {"quotation_signed": "quotations", "quotation_spec": "quotation_specs", "case_update": "case_updates", "payment_item": "quotation_payment_items",
                    "material": "quotation_materials", "material_invoice": "quotation_materials_invoices",
                    "extra_expense": "case_extra_expense", "completion_note": "completion_notes"}
 
@@ -270,7 +278,7 @@ def _path_bound_to_doc(conn, source_type, doc_no, entry):
         return quote_no is not None and idx is not None and base == quote_no
     if key is None:
         return False
-    if source_type in ("quotation_signed", "case_update", "completion_note"):
+    if source_type in ("quotation_signed", "quotation_spec", "case_update", "completion_note"):
         return key == str(doc_no)
     quote_no = _quote_of(conn, source_type, doc_no)
     if source_type == "extra_expense":
@@ -284,6 +292,7 @@ class _CaseCatalog:
     待核准暫存檔（`_pending_case_changes`、額外支出變更申請）不進目錄（設計 Q6：未核准的不是正式檔案）。"""
     CATEGORIES = {
         "quotation_signed": {"label": "報價單回簽", "doc": "報價單", "module": "案件管理"},
+        "quotation_spec": {"label": "報價單規格文件", "doc": "報價單", "module": "案件管理"},
         "case_update": {"label": "案件動態附件", "doc": "案件動態", "module": "案件管理"},
         "payment_item": {"label": "收付款項目發票", "doc": "案件收付款", "module": "案件管理"},
         "material": {"label": "材料附件", "doc": "案件材料", "module": "案件管理"},
@@ -323,7 +332,7 @@ class _CaseCatalog:
             return [crit["quote_no"]]
         like = _CaseCatalog._LIKE
         qs = set()
-        for sql in ("SELECT quote_no FROM quotations WHERE signed_files_json LIKE ? OR data_json LIKE ?",
+        for sql in ("SELECT quote_no FROM quotations WHERE signed_files_json LIKE ? OR spec_files_json LIKE ? OR data_json LIKE ?",
                     "SELECT DISTINCT quote_no FROM case_updates WHERE files_json LIKE ?",
                     "SELECT DISTINCT quote_no FROM case_extra_expenses WHERE files_json LIKE ?",
                     "SELECT DISTINCT quote_no FROM completion_notes WHERE signed_files_json LIKE ?"):

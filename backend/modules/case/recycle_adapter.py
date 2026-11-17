@@ -362,7 +362,7 @@ class QuotationAdapter(RB.Adapter):
                 rows[table] = _rows(conn, table, "%s=?" % col, (qn,))
             except sqlite3.OperationalError:
                 rows[table] = []
-        rels = _paths_of(row.get("signed_files_json"), row.get("data_json"))
+        rels = _paths_of(row.get("signed_files_json"), row.get("spec_files_json"), row.get("data_json"))     # spec_files_json＝規格 PDF（備註事項 B）：隨報價單進／出回收筒
         for u in rows["case_updates"]:
             rels += _paths_of(u.get("files_json"))
         seen, files = set(), []
@@ -393,7 +393,7 @@ class QuotationAdapter(RB.Adapter):
         qn = q["quote_no"]
         if self._row(conn, qn) is not None:
             raise RB.BinError("conflict: %s號 %s 已被占用（請先處理現有那張）" % (_DT.label_of_no(qn), qn))
-        _insert(conn, "quotations", _remap_json_cols(q, ctx, "signed_files_json", "data_json"), drop_id=_id_taken(conn, "quotations", q))
+        _insert(conn, "quotations", _remap_json_cols(q, ctx, "signed_files_json", "spec_files_json", "data_json"), drop_id=_id_taken(conn, "quotations", q))
         idmap = {}
         for s in rows.get("case_stages", []):
             new = _insert(conn, "case_stages", s, drop_id=_id_taken(conn, "case_stages", s))

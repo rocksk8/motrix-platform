@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 1023,
-  "endpoints_api": 1019,
-  "write_total": 550,
-  "write_api": 550,
-  "get_api": 469,
-  "distinct_paths_api": 868,
-  "write_with_body_api": 411,
-  "write_with_path_param_api": 371
+  "endpoints_total": 1028,
+  "endpoints_api": 1024,
+  "write_total": 554,
+  "write_api": 554,
+  "get_api": 470,
+  "distinct_paths_api": 872,
+  "write_with_body_api": 413,
+  "write_with_path_param_api": 374
  },
  "select_star": {
-  "modules": 289,
+  "modules": 290,
   "archive": 97,
   "routers": 11,
   "helpers": 12,
@@ -249,6 +249,11 @@
    "body": false
   },
   "DELETE /api/quotations/{quote_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/spec-files/{file_id}": {
    "w": true,
    "pp": 2,
    "body": false
@@ -2333,6 +2338,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/settings/quote-notes-templates": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings/quote-terms-defaults": {
    "w": false,
    "pp": 0,
@@ -4233,6 +4243,16 @@
    "pp": 1,
    "body": true
   },
+  "POST /api/quotations/{quote_no}/spec-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/spec-files/discard-staged": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
   "POST /api/quotations/{quote_no}/stages": {
    "w": true,
    "pp": 1,
@@ -4989,6 +5009,11 @@
    "body": true
   },
   "PUT /api/settings/payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/quote-notes-templates": {
    "w": true,
    "pp": 0,
    "body": true

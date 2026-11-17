@@ -2231,6 +2231,108 @@
         </div>
       </div>
 
+      <!-- 七、備註事項（2026-11-17）：有填才印在簽章之後的新頁；範本由最高管理者維護，套用＝複製文字（不連動）。
+           鎖定時由 _syncControlLock() 統一把文字區改唯讀、按鈕停用（這裡不需要自己處理）。 -->
+      <div class="form-section" data-testid="qf-notes-section">
+        <div class="section-title"><div class="section-num">七</div>備註事項</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--text-dim)">有填才會印在簽章之後的新頁（沒填就不印、不多一頁）。純文字，換行、空行、「- 」條列照原樣輸出。</span>
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-toggle"
+                    x-show="notesTpls.length" @click="notesTplOpen = !notesTplOpen; notesTplPending = null"
+                    x-text="notesTplOpen ? '收起範本' : '套用範本（' + notesTpls.length + '）'"></button>
+            <button type="button" class="btn btn-ghost btn-sm keep-open" data-testid="qf-notes-tpl-manage"
+                    x-show="session.role === 'superadmin'" @click="openNotesTplManager()">管理範本</button>
+          </span>
+        </div>
+
+        <!-- 範本挑選：超過 10 個才出現分類篩選與搜尋；點範本＝套用（框內已有內容時先問取代或接在後面） -->
+        <div x-show="notesTplOpen" data-testid="qf-notes-tpl-panel"
+             style="border:1px solid var(--border-light);border-radius:6px;padding:10px 12px;margin-bottom:10px;background:#FAFAF8">
+          <div x-show="notesTpls.length > 10" data-testid="qf-notes-tpl-filter" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="notesTplCat = ''"
+                    :style="notesTplCat === '' ? 'background:#0A0A0A;color:#F5F4F0' : ''"
+                    x-text="'全部 ' + notesTpls.length"></button>
+            <template x-for="c in notesTplCategories" :key="c.name">
+              <button type="button" class="btn btn-ghost btn-sm" @click="notesTplCat = c.name"
+                      :style="notesTplCat === c.name ? 'background:#0A0A0A;color:#F5F4F0' : ''"
+                      x-text="c.name + ' ' + c.n"></button>
+            </template>
+            <input type="text" class="form-input" style="max-width:200px;margin-left:auto" x-model="notesTplQ"
+                   placeholder="搜尋範本名稱" data-testid="qf-notes-tpl-search">
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <template x-for="t in notesTplFiltered" :key="t.key">
+              <button type="button" data-testid="qf-notes-tpl-item" @click="pickNotesTpl(t)" :title="t.category || ''"
+                      style="padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;cursor:pointer;background:#fff;color:#4A4744;border:1px solid var(--border-light)">
+                <span x-text="t.name"></span>
+                <span x-show="t.category" style="font-size:10px;opacity:.6" x-text="' · ' + t.category"></span>
+              </button>
+            </template>
+            <span x-show="!notesTplFiltered.length" style="font-size:11px;color:var(--text-dim);padding:6px 0">沒有符合的範本。</span>
+          </div>
+          <div x-show="notesTplPending" data-testid="qf-notes-tpl-ask"
+               style="margin-top:10px;padding:8px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span>備註框內已有內容。套用「<b x-text="notesTplPending && notesTplPending.name"></b>」要：</span>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-replace" @click="applyNotesTpl('replace')">取代目前內容</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-tpl-append" @click="applyNotesTpl('append')">接在後面</button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="notesTplPending = null">取消</button>
+          </div>
+        </div>
+
+        <textarea class="form-textarea" rows="12" maxlength="20000" data-testid="qf-extra-notes"
+                  x-model="q.extraNotes" @input="setDirty()" style="min-height:250px;white-space:pre-wrap"
+                  placeholder="例如：&#10;備註事項：&#10;一、車體規格&#10;   - 車體尺寸：…&#10;二、其它硬體設備項目&#10;   - …"></textarea>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:4px;font-size:11px;color:var(--text-dim)">
+          <span>套用範本後可再修改，不會與範本連動；之後改範本也不會動到已開出的單。</span>
+          <span data-testid="qf-extra-notes-count" x-text="(q.extraNotes || '').length + ' / 20000 字'"></span>
+        </div>
+
+        <!-- 併入輸出的規格文件（2026-11-17）：規格 PDF 接在報價單後面合成同一份 PDF；勾選的才併入、順序＝合併順序 -->
+        <div style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--border-light)" data-testid="qf-spec-panel">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">併入輸出的規格文件（PDF）</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
+            勾選的規格 PDF 會接在報價單（含備註頁）之後，合成同一份 PDF 輸出。最多 10 個檔、單檔與總量有上限；加密或損毀的檔會在輸出時略過並提示，不影響報價單本身。
+            「複製為新報價單」只複製備註文字，不複製規格檔。
+          </div>
+          <div x-show="isNewRecord" data-testid="qf-spec-needsave" style="font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:6px 10px">
+            請先存成草稿，取得單號後才能上傳規格文件。
+          </div>
+          <div x-show="!isNewRecord">
+            <div x-show="unlocked" data-testid="qf-spec-unlock-hint" style="font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:6px 10px;margin-bottom:6px">
+              解鎖編輯中：新上傳與刪除的規格文件要按「儲存修改」才生效（並重新送簽）；按「重新鎖定」或放棄修改會回到原狀。
+            </div>
+            <template x-for="(f, idx) in specRows" :key="f.id">
+              <div data-testid="qf-spec-row" :data-spec-state="f.staged ? 'staged' : (specPendingDel(f.id) ? 'deleting' : 'ok')" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;background:#fff"
+                   :style="specPendingDel(f.id) ? 'opacity:.6;background:#FEF2F2' : (f.staged ? 'background:#F0FDF4' : '')">
+                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="specLocked() || specPendingDel(f.id)">
+                <span data-testid="qf-spec-order" x-show="specSelected(f.id)" style="font-size:11px;font-weight:700;min-width:20px" x-text="(q.mergeFiles || []).indexOf(f.id) + 1 + '.'"></span>
+                <a x-show="!f.staged" href="javascript:void(0)" @click="previewSpec(f)" style="color:var(--accent);font-size:12px" :style="specPendingDel(f.id) ? 'text-decoration:line-through' : 'text-decoration:underline'" x-text="f.name"></a>
+                <span x-show="f.staged" style="font-size:12px" x-text="f.name"></span>
+                <span x-show="f.staged" data-testid="qf-spec-staged-badge" style="font-size:11px;color:#166534;background:#DCFCE7;border-radius:4px;padding:1px 6px">待儲存</span>
+                <span x-show="specPendingDel(f.id)" data-testid="qf-spec-deleting-badge" style="font-size:11px;color:#991B1B;background:#FEE2E2;border-radius:4px;padding:1px 6px">待刪除</span>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="specMeta(f)"></span>
+                <span x-show="f.status && f.status !== 'ok'" data-testid="qf-spec-warn"
+                      style="font-size:11px;color:#B91C1C;background:#FEE2E2;border-radius:4px;padding:1px 6px" x-text="specWarn(f)"></span>
+                <span style="margin-left:auto;display:flex;gap:4px">
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-up" x-show="specSelected(f.id)" :disabled="specLocked() || (q.mergeFiles || []).indexOf(f.id) === 0" @click="moveSpec(f.id, -1)">↑</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-down" x-show="specSelected(f.id)" :disabled="specLocked() || (q.mergeFiles || []).indexOf(f.id) === (q.mergeFiles || []).length - 1" @click="moveSpec(f.id, 1)">↓</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-restore" x-show="specPendingDel(f.id)" @click="restoreSpec(f.id)">還原</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" x-show="!specPendingDel(f.id)" style="color:#B91C1C" :disabled="specLocked()" @click="deleteSpecFile(f)" x-text="f.staged ? '移除' : '刪除'">刪除</button>
+                </span>
+              </div>
+            </template>
+            <div x-show="!specRows.length" style="font-size:11px;color:var(--text-dim);padding:4px 0">尚無規格文件。</div>
+            <label data-testid="qf-spec-upload" style="display:inline-block;margin-top:4px;padding:5px 12px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer"
+                   :style="(specLocked() || specUploading) ? 'opacity:.5;pointer-events:none' : ''">
+              <span x-text="specUploading ? '上傳中…' : '＋ 上傳規格 PDF'"></span>
+              <input type="file" multiple accept=".pdf,application/pdf" style="display:none" data-testid="qf-spec-input" @change="uploadSpecFiles($event)">
+            </label>
+            <span style="font-size:11px;color:var(--text-dim);margin-left:8px" x-text="specCount + ' / 10 個'"></span>
+          </div>
+        </div>
+      </div>
+
     </div><!-- /form-left -->
 
     <!-- ══ 右側成本分機面板 ══ -->
@@ -2625,6 +2727,48 @@
     </div>
   </div>
 
+  <!-- ══ 備註事項範本管理 Modal（superadmin，2026-11-17）══ -->
+  <div class="modal-overlay" x-show="notesMgrOpen" x-transition data-testid="qf-notes-mgr"
+       @click.self="notesMgrOpen=false" style="display:none">
+    <div class="modal-box" style="max-width:820px">
+      <div class="modal-head">
+        <span class="modal-head__title">管理備註事項範本</span>
+        <button class="modal-close" @click="notesMgrOpen=false">×</button>
+      </div>
+      <div style="padding:16px 18px;max-height:calc(70vh / var(--fz,1));overflow:auto">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
+          範本是常用的備註事項文字（例如 AGV、監控系統）。報價單與估價單共用同一份，最多 100 個、每個 20,000 字。<br>
+          ⚠️ 改這裡<b>不會動到任何已經開立的單</b>——單據存的是套用當下複製的文字，不是指向這裡的連結。
+        </div>
+        <div x-show="notesTplDraft.length > 10" style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" class="form-input" x-model="notesMgrQ" placeholder="搜尋範本名稱或分類" data-testid="qf-notes-mgr-search">
+        </div>
+        <template x-for="t in notesTplDraftShown" :key="t.key">
+          <div style="border:1px solid var(--border-light);border-radius:6px;padding:12px;margin-bottom:10px" data-testid="qf-notes-mgr-item">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+              <input class="form-input" style="max-width:220px" type="text" maxlength="30" x-model="t.name" placeholder="範本名稱，例如：AGV 報價範本">
+              <input class="form-input" style="max-width:160px" type="text" maxlength="20" x-model="t.category" placeholder="分類（選填）" list="qf-notes-cats">
+              <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;color:#B91C1C" @click="removeNotesTpl(t.key)">刪除</button>
+            </div>
+            <textarea class="form-textarea" rows="6" maxlength="20000" x-model="t.text" style="font-size:12px;white-space:pre-wrap"></textarea>
+            <div style="text-align:right;font-size:10px;color:var(--text-dim)" x-text="(t.text || '').length + ' / 20000 字'"></div>
+          </div>
+        </template>
+        <datalist id="qf-notes-cats">
+          <template x-for="c in notesDraftCategories" :key="c"><option :value="c"></option></template>
+        </datalist>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-notes-mgr-add" @click="addNotesTpl(false)">新增一個範本</button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="addNotesTpl(true)">以目前備註內容新增</button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" data-testid="qf-notes-mgr-save"
+                  @click="saveNotesTpls()" :disabled="notesTplSaving">
+            <span x-text="notesTplSaving ? '儲存中…' : '儲存'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ PDF 預覽 Modal ══ -->
   <div class="modal-overlay" x-show="previewMode" x-transition @click.self="previewMode=null" style="display:none">
     <div class="modal-box">
@@ -2953,6 +3097,8 @@
         acceptanceTerms: DEFAULT_TERMS.acceptanceTerms,
         warrantyTerms: DEFAULT_TERMS.warrantyTerms,
         afterSales: DEFAULT_TERMS.afterSales,
+        extraNotes: '',                      // 備註事項（2026-11-17）：空字串 ⇒ 伺服器不存這個鍵、PDF 不多一頁
+        mergeFiles: [],                      // 併入輸出的規格文件 id（有序；空 ⇒ 伺服器丟鍵）。檔案清單在 specFiles（不進 q）
 
         indirectLogistics: 0, indirectInstallation: 0,
         indirectTravel: 0,   indirectWarranty: 0, indirectOther: 0,
@@ -2986,6 +3132,15 @@
         { key: 'warrantyTerms',   label: '保固條件' },
         { key: 'afterSales',      label: AFTERSALES_LABEL },
       ],
+      // ── 備註事項範本（2026-11-17）：單據存的是複製過去的文字，範本只是清單 ──
+      notesTpls: [],              // [{key,name,category,text}]（設定 quote_extra_notes_templates；報價單與估價單共用）
+      _notesTplLoadFailed: false,
+      notesTplOpen: false, notesTplQ: '', notesTplCat: '', notesTplPending: null,
+      notesMgrOpen: false, notesTplDraft: [], notesMgrQ: '', notesTplSaving: false,
+      // ── 規格文件（2026-11-17）：清單來自單筆 GET 的頂層 specFiles（不放進 q，避免被整份存檔送回去）──
+      specFiles: [], specUploading: false,
+      specStaged: [],            // 解鎖編輯中上傳、尚未存檔的規格檔（伺服器暫存；存檔時以 _specChanges.add 送回）
+      specPendingDelete: [],     // 解鎖編輯中標記刪除、尚未存檔的規格檔 id（純本機；存檔時以 _specChanges.remove 送回）
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
@@ -3872,6 +4027,210 @@
         }
       },
 
+      // ── 併入輸出的規格文件（2026-11-17）：後端端點由 quotation_specs 提供；這裡只負責清單、勾選與排序 ──
+      get specRows() {
+        // 已勾選的（依合併順序）排前面，沒勾的接在後面（維持上傳順序）
+        const sel = this.q.mergeFiles || []
+        const all = this.specAll
+        const byId = new Map(all.map(f => [f.id, f]))
+        return [...sel.map(id => byId.get(id)).filter(Boolean), ...all.filter(f => !sel.includes(f.id))]
+      },
+      // 規格面板鎖定：已送出／已駁回、或待審核／簽核中且尚未解鎖編輯（只有最高管理者解鎖後才可處理規格檔）
+      specLocked() { return this.isStatusLocked() || (this.isPendingStatus() && !this.unlocked) },
+      get specAll() { return [...this.specFiles, ...this.specStaged.map(f => ({ ...f, staged: true }))] },
+      get specCount() { return this.specAll.filter(f => !this.specPendingDel(f.id)).length },
+      specPendingDel(id) { return this.specPendingDelete.includes(id) },
+      _specChangesPayload() {
+        const add = this.specStaged.map(f => f.id), remove = [...this.specPendingDelete]
+        return (add.length || remove.length) ? { add, remove } : null
+      },
+      _specClearLocal() { this.specStaged = []; this.specPendingDelete = [] },
+      // 解鎖編輯收尾（放棄／重新鎖定／剛解鎖）：清掉伺服器上本人的暫存檔與本機的待刪標記；冪等、失敗不擋主流程
+      async _discardStagedSpecs() {
+        this._specClearLocal()
+        if (!this.q.quoteNo || this.isNewRecord) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files/discard-staged`, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const d = await r.json().catch(() => ({}))
+          if (Array.isArray(d.specFiles)) this.specFiles = d.specFiles
+        } catch (_e) {}
+      },
+      restoreSpec(id) { this.specPendingDelete = this.specPendingDelete.filter(x => x !== id); this.setDirty() },
+      specSelected(id) { return (this.q.mergeFiles || []).includes(id) },
+      specMeta(f) {
+        const kb = f.size ? (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB') : ''  /* 非金額 */ // 檔案大小 KB
+        return [f.pages ? f.pages + ' 頁' : '', kb].filter(Boolean).join('・')
+      },
+      specWarn(f) {
+        return ({ encrypted: '已加密：輸出時會略過', broken: '檔案損毀：輸出時會略過', empty: '沒有頁面：輸出時會略過' })[f.status] || ''
+      },
+      toggleSpec(id) {
+        const sel = [...(this.q.mergeFiles || [])]
+        const i = sel.indexOf(id)
+        if (i >= 0) sel.splice(i, 1)
+        else {
+          const f = this.specAll.find(x => x.id === id)
+          if (f && f.status && f.status !== 'ok' && !confirm(`「${f.name}」${this.specWarn(f)}。仍要勾選嗎？`)) { this.q.mergeFiles = [...(this.q.mergeFiles || [])]; return }
+          sel.push(id)
+        }
+        this.q.mergeFiles = sel
+        this.setDirty()
+      },
+      moveSpec(id, dir) {
+        const sel = [...(this.q.mergeFiles || [])]
+        const i = sel.indexOf(id), j = i + dir
+        if (i < 0 || j < 0 || j >= sel.length) return
+        ;[sel[i], sel[j]] = [sel[j], sel[i]]
+        this.q.mergeFiles = sel
+        this.setDirty()
+      },
+      async uploadSpecFiles(evt) {
+        const files = evt?.target?.files
+        if (!files || !files.length || !this.q.quoteNo || this.isNewRecord) return
+        const bad = [...files].find(f => !/\.pdf$/i.test(f.name))
+        if (bad) { alert(`「${bad.name}」不是 PDF；規格文件只收 PDF`); evt.target.value = ''; return }
+        const fd = new FormData()
+        for (const f of files) fd.append('files', f)
+        this.specUploading = true
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files`, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { alert(d.detail || '上傳失敗'); return }
+          this.specFiles = d.specFiles || this.specFiles
+          const staging = Array.isArray(d.staged)           // 解鎖編輯：伺服器只暫存，存檔才生效
+          if (staging) { this.specStaged = d.staged; this.setDirty() }
+          if ((d.rejected || []).length) alert('以下檔案未收：\n' + d.rejected.map(x => `・${x.name}：${x.reason}`).join('\n'))
+          else this.toast(staging && this.unlocked ? `已暫存 ${files.length} 個規格文件（按「儲存修改」才生效）` : `已上傳 ${files.length} 個規格文件（要併入輸出請勾選）`)
+          if (!staging || !this.unlocked) this._refreshUpdatedAt && this._refreshUpdatedAt()
+        } catch (e) { alert('上傳失敗：' + e.message) }
+        finally { this.specUploading = false; evt.target.value = '' }
+      },
+      async deleteSpecFile(f) {
+        if (!confirm(`確定刪除規格文件「${f.name}」？${this.specSelected(f.id) ? '\n它目前是勾選併入的，刪除後輸出就不再包含它。' : ''}`)) return
+        if (this.unlocked && !f.staged) {            // 解鎖編輯刪「已生效」的檔：只在本機標記，存檔才真的刪（放棄修改＝回原狀）
+          if (!this.specPendingDelete.includes(f.id)) this.specPendingDelete = [...this.specPendingDelete, f.id]
+          this.q.mergeFiles = (this.q.mergeFiles || []).filter(id => id !== f.id)
+          this.setDirty()
+          return
+        }
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files/${encodeURIComponent(f.id)}`, {
+            method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { alert(d.detail || '刪除失敗'); return }
+          this.specFiles = d.specFiles || this.specFiles.filter(x => x.id !== f.id)
+          if (f.staged) this.specStaged = Array.isArray(d.staged) ? d.staged : this.specStaged.filter(x => x.id !== f.id)
+          this.q.mergeFiles = (this.q.mergeFiles || []).filter(id => id !== f.id)   // 伺服器同交易已移除；本機未存的勾選保留其餘
+          if (!f.staged) this._refreshUpdatedAt && this._refreshUpdatedAt()     // 伺服器改了單據內容：換樂觀鎖基準，避免下次存檔 409
+        } catch (e) { alert('刪除失敗：' + e.message) }
+      },
+      async previewSpec(f) {
+        try { await MotrixFilePreview.openFile({ path: f.path, filename: f.name, name: f.name, mime: 'application/pdf' }) }
+        catch (e) { alert('開啟檔案失敗：' + e.message) }
+      },
+      // 下載回應若帶 X-Pdf-Merge-Skipped（URL-encode 的 JSON）＝有規格文件沒併進去：明講哪個檔、為什麼
+      _toastMergeSkipped(r) {
+        const raw = r && r.headers && r.headers.get('X-Pdf-Merge-Skipped')
+        if (!raw) return
+        try {
+          const why = { encrypted: '已加密', broken: '檔案損毀', empty: '沒有頁面', missing: '檔案已不存在', over_pages: '超過頁數上限', over_size: '超過大小上限' }
+          const list = JSON.parse(decodeURIComponent(raw))
+          if (list.length) alert(`PDF 已輸出，但有 ${list.length} 個規格文件沒有併入：\n` + list.map(x => `・${x.name}（${why[x.reason] || x.reason}）`).join('\n'))
+        } catch {}
+      },
+
+      // ── 備註事項範本（2026-11-17）──────────────────────────────────────
+      async loadNotesTemplates() {
+        try {
+          const r = await fetch(`${this.API}/settings/quote-notes-templates`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          const d = await r.json()
+          this.notesTpls = Array.isArray(d.templates) ? d.templates : []
+          this._notesTplLoadFailed = false
+        } catch {
+          this._notesTplLoadFailed = true      // 讀取失敗：不讓管理視窗拿空清單去覆蓋設定
+        }
+      },
+      get notesTplCategories() {
+        const m = new Map()
+        for (const t of this.notesTpls) { const c = (t.category || '').trim() || '未分類'; m.set(c, (m.get(c) || 0) + 1) }
+        return [...m.entries()].map(([name, n]) => ({ name, n }))
+      },
+      get notesTplFiltered() {
+        const q = (this.notesTplQ || '').trim().toLowerCase()
+        const cat = this.notesTplCat
+        return this.notesTpls.filter(t => {
+          if (cat && ((t.category || '').trim() || '未分類') !== cat) return false
+          return !q || (t.name || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q)
+        })
+      },
+      // 點範本：框內已有內容 ⇒ 先問取代或接在後面；空白 ⇒ 直接套用
+      pickNotesTpl(t) {
+        if ((this.q.extraNotes || '').trim()) { this.notesTplPending = t; return }
+        this.notesTplPending = t
+        this.applyNotesTpl('replace')
+      },
+      applyNotesTpl(mode) {
+        const t = this.notesTplPending
+        if (!t) return
+        const cur = this.q.extraNotes || ''
+        const next = mode === 'append' && cur.trim() ? cur.replace(/\s+$/, '') + '\n\n' + (t.text || '') : (t.text || '')
+        this.q.extraNotes = next.slice(0, 20000)
+        this.notesTplPending = null
+        this.setDirty()
+        this.toast(`已套用「${t.name}」`)
+      },
+      openNotesTplManager() {
+        if (this._notesTplLoadFailed) { this.toast('備註範本載入失敗，請重新整理頁面後再管理（避免用空清單覆蓋設定）'); return }
+        this.notesTplDraft = JSON.parse(JSON.stringify(this.notesTpls))
+        this.notesMgrQ = ''
+        this.notesMgrOpen = true
+      },
+      get notesTplDraftShown() {
+        const q = (this.notesMgrQ || '').trim().toLowerCase()
+        return this.notesTplDraft.filter(t => !q || (t.name || '').toLowerCase().includes(q) || (t.category || '').toLowerCase().includes(q))
+      },
+      get notesDraftCategories() {
+        return [...new Set(this.notesTplDraft.map(t => (t.category || '').trim()).filter(Boolean))]
+      },
+      addNotesTpl(fromForm) {
+        this.notesMgrQ = ''
+        this.notesTplDraft.push({ key: 'new_' + Math.random().toString(36).slice(2, 10), name: '', category: '', text: fromForm ? (this.q.extraNotes || '') : '' })
+      },
+      removeNotesTpl(key) {
+        const t = this.notesTplDraft.find(x => x.key === key)
+        if (!t || !confirm(`確定刪除範本「${t.name || '（未命名）'}」？\n已經開立的單不受影響。`)) return
+        this.notesTplDraft = this.notesTplDraft.filter(x => x.key !== key)
+      },
+      async saveNotesTpls() {
+        const bad = this.notesTplDraft.find(t => !(t.name || '').trim() || !(t.text || '').trim())
+        if (bad) { alert('每個範本都要有名稱與內容'); return }
+        this.notesTplSaving = true
+        try {
+          const res = await fetch(`${this.API}/settings/quote-notes-templates`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ templates: this.notesTplDraft.map(t => ({ ...t, key: String(t.key || '').startsWith('new_') ? '' : t.key })) }),
+          })
+          if (!res.ok) {
+            let msg = '儲存失敗'
+            try { const e = await res.json(); msg = e.detail || msg } catch {}
+            alert(msg); return
+          }
+          const d = await res.json()
+          this.notesTpls = d.templates || []
+          this.notesMgrOpen = false
+          this.toast('✓ 備註範本已更新')
+        } catch {
+          alert('儲存失敗，請確認後端伺服器是否在線')
+        } finally {
+          this.notesTplSaving = false
+        }
+      },
+
       // ── 補登歷史案件（T70-1）：判斷全在後端（日期範圍、單號、原因、權限、開關）；這裡只負責呈現與送出 ──
       async _loadBackfillConfig() {
         try {
@@ -3974,7 +4333,7 @@
           contactPhone: ['qcustomer', '電話 / 分機'], contactEmail: ['qcustomer', 'E-mail'], deliveryAddress: ['qcustomer', '送貨地址 / 發票地址'],
           deliveryLocation: ['qproject', '交貨地點'], validDays: ['qbasic', '有效天數'], salesPerson: ['qbasic', '報價人'], locationId: ['qbasic', '開立據點'],
           paymentTerms: ['qterms', '付款條件'], deliveryTerms: ['qterms', '交貨條件'], acceptanceTerms: ['qterms', '驗收標準'],
-          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL] }
+          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL], extraNotes: ['qterms', '備註事項'], mergeFiles: ['qterms', '併入輸出的規格文件'] }
         const mineNow = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
         const base = this._qBase || {}
         const changed = Object.keys(mineNow).filter(k => !SKIP.includes(k) && JSON.stringify(mineNow[k]) !== JSON.stringify(base[k]))
@@ -4244,9 +4603,14 @@
         this.isNewRecord = false
 
         const wasUnlocked = this.unlocked
-        if (wasUnlocked) this.q._isUnlockEdit = true
+        if (wasUnlocked) {
+          this.q._isUnlockEdit = true
+          const sc = this._specChangesPayload()
+          if (sc) this.q._specChanges = sc          // 解鎖編輯的規格文件異動：與 _isUnlockEdit 同層，伺服器消費後不存進 data_json
+        }
         const ok = await this.apiSave(wasNew).catch(() => false)
         delete this.q._isUnlockEdit
+        delete this.q._specChanges
         if (!ok) {
           if (this._saveConflict) {
             alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。\n請按畫面上方橫幅的「載入最新版，保留我的修改」（只換掉您沒改過的欄位），確認後再儲存。')
@@ -4256,6 +4620,7 @@
           return false     // 失敗：unlocked 與畫面上的修改都原樣保留
         }
         this.isDirty = false
+        if (wasUnlocked && (this.specStaged.length || this.specPendingDelete.length)) await this._reloadSpecFilesAfterSave()
         if (this.unlocked) { this.unlocked = false; this.showUnlockModal = false; this.unlockPwd = ''; this.unlockError = '' }
         const now = new Date()
         this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
@@ -4321,6 +4686,7 @@
             this.toast(msg); return
           }
           const blob = await r.blob()
+          this._toastMergeSkipped(r)
           const url  = URL.createObjectURL(blob)
           const a    = document.createElement('a')
           a.href     = url
@@ -4384,6 +4750,7 @@
             this.toast(msg); return
           }
           const blob = await r.blob()
+          this._toastMergeSkipped(r)
           this._pdfCache = { key: _pk, blob }
           this._saveBlobAs(blob, `${this.q.quoteNo}.pdf`)
           this.toast('PDF 已下載完成（檔名 ' + this.q.quoteNo + '.pdf，在瀏覽器的「下載」）')
@@ -4914,6 +5281,8 @@
         this.q.signedAt = row.signed_at || ''
         this.q.signedLog = row.signed_log || []
         this.q.signedFiles = row.signed_files || []
+        this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+        this._specClearLocal()
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
           this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })
@@ -5121,6 +5490,7 @@
           settlement: null,
           editHistory: [],
           overheadPct: null,                     // 第 48 班（Q8）：複製為新單用全域預設比率，不繼承來源單的特例
+          mergeFiles: undefined,                 // 備註文字照複製；規格檔屬於來源單，不複製檔案也不帶勾選（2026-11-17）
         }
         template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
@@ -5201,6 +5571,7 @@
             this.unlocked = true
             this.showUnlockModal = false
             this.unlockPwd = ''
+            this._discardStagedSpecs()      // 上次解鎖沒收尾（關頁／斷線）留下的暫存檔一併清掉
           } else {
             const d = await res.json().catch(() => ({}))
             this.unlockError = d.detail || '解鎖密碼不正確'
@@ -5212,12 +5583,26 @@
         }
       },
 
+      // 解鎖存檔成功後：暫存檔已轉正、待刪檔已刪——以伺服器為準重取規格檔清單與勾選
+      async _reloadSpecFilesAfterSave() {
+        this._specClearLocal()
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const row = await r.json()
+          this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+          this.q.mergeFiles = Array.isArray(row.data?.mergeFiles) ? row.data.mergeFiles : []
+          this._lastUpdatedAt = row.updated_at || this._lastUpdatedAt
+          this._fpSaved = this._fpNow()
+        } catch (_e) {}
+      },
+
       // 「重新鎖定」（2026-11-17）：沒有未存的修改 ⇒ 直接鎖回去；有 ⇒ 走跟「儲存修改」同一條 saveDraft()（同樣的驗證、稽核、通知），
       // 成功（saveDraft 內已鎖回去）才算完成；失敗就維持解鎖、修改留在畫面上（saveDraft 已顯示原因）。不在這裡另寫儲存、也不先把 unlocked 設成 false：
       // saveDraft 要靠 unlocked 判斷走解鎖編輯的 PUT（_isUnlockEdit）、並且不套用「內容沒變就不送」的短路。
       // 想捨棄修改的人用「放棄修改」（discardUnlockEdit）。
       async cancelUnlock() {
-        if (this.unlocked && this.isDirty) {
+        if (this.unlocked && (this.isDirty || this.specStaged.length || this.specPendingDelete.length)) {
           await this.saveDraft()
           return
         }
@@ -5226,10 +5611,11 @@
 
       // 「放棄修改」：明確捨棄尚未儲存的修改並鎖回去。有未存的修改 ⇒ 先確認，確認後載回伺服器版（不留「鎖住卻顯示改過的值」）
       async discardUnlockEdit() {
-        if (this.unlocked && this.isDirty) {
-          if (!confirm('放棄尚未儲存的修改並重新鎖定？放棄後無法復原。')) return
+        if (this.unlocked && (this.isDirty || this.specStaged.length || this.specPendingDelete.length)) {
+          if (!confirm('放棄尚未儲存的修改（含新上傳／待刪除的規格文件）並重新鎖定？放棄後無法復原。')) return
           await this.reloadLatestAfterConflict()
           if (this.isDirty) return      // 載入失敗：保持解鎖、修改仍在畫面上（reloadLatestAfterConflict 已提示）
+          await this._discardStagedSpecs()
           this.toast('已放棄未儲存的修改')
         }
         this._lockNow()
@@ -5554,6 +5940,7 @@
         // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
         // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
         await this.loadTermsPresets()
+        this.loadNotesTemplates()    // 備註事項範本（2026-11-17；不擋載入）
         this.loadTaxBasisOptions()   // R2：零稅率／免稅依據選項（不擋載入）
 
         // ── 從 URL 讀取報價單號 ──
@@ -5615,6 +6002,8 @@
               this.q.signedAt = row.signed_at || ''
               this.q.signedLog = row.signed_log || []
               this.q.signedFiles = row.signed_files || []
+              this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+              this._specClearLocal()
               this.salesEmailSource = ''      // 既有報價單：業務員資料照存檔的快照，不顯示「尚未設定公司信箱」提醒
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']
