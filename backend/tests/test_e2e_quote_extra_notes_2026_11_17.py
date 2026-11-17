@@ -180,6 +180,7 @@ def _saved_quote_page(client, live_server, make_user, new_page, login_as, userna
     no = r.json()["quote_no"]
     page = new_page()
     login_as(page, u)
+    page._xn_user = u
     if specs is not None:                       # 頁面會在載入／刷新時用單筆 GET 的 specFiles 覆蓋清單：在回應裡注入，畫面才不會被清掉
         def _inject(route):
             resp = route.fetch()
@@ -287,3 +288,172 @@ def test_download_shows_which_spec_files_were_skipped(client, live_server, make_
     page.evaluate(f"() => {ROOT}._downloadServerPdf('external')")
     page.wait_for_timeout(800)
     assert msgs and "加密.pdf" in msgs[0] and "已加密" in msgs[0], msgs
+
+
+# ── 解鎖編輯（最高管理者）可上傳／刪除規格文件：暫存、待刪標示、儲存才生效、放棄回原狀（真後端）──────────────
+
+def _unlock_world(live_server, make_user, e2e_browser, username):
+    from tests.test_e2e_review_edit_lock_2026_11_11 import NO as LNO, _open_form, _seed, _set_mode
+    from tests.test_e2e_superadmin_approver_edit_entry_2026_11_13 import _UNLOCK_PW, _set_unlock_password
+    from tests._e2e_login import inject_login
+    u, p = make_user(username=username, role="superadmin", modules=["quotation"])
+    _set_unlock_password(u)
+    _set_mode(2)
+    _seed([u])
+    _make_submittable(u, username + "_mgr", make_user)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    _open_form(page, live_server)
+    return page, LNO, _UNLOCK_PW
+
+
+def _make_submittable(u, mgr_name, make_user):
+    """解鎖存檔會重送簽核：送審人要有部門與部門主管（種子單的送審人改成這位最高管理者本人）。"""
+    import db
+    from tests.test_e2e_review_edit_lock_2026_11_11 import NO as LNO
+    make_user(username=mgr_name, role="admin", modules=["quotation"])
+    c = db.get_db()
+    try:
+        cur = c.execute("INSERT INTO divisions (name, sort_order, created_at) VALUES (?,?,?)", ("規格測試處" + u, 0, "2026-11-17T00:00:00"))
+        cur = c.execute("INSERT INTO departments (division_id, name, sort_order, created_at) VALUES (?,?,?,?)", (cur.lastrowid, "規格測試部" + u, 0, "2026-11-17T00:00:00"))
+        dept = cur.lastrowid
+        mid = c.execute("SELECT id FROM users WHERE username=?", (mgr_name,)).fetchone()[0]
+        c.execute("UPDATE departments SET manager_user_id=? WHERE id=?", (mid, dept))
+        c.execute("UPDATE users SET department_id=? WHERE username IN (?,?)", (dept, u, mgr_name))
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (LNO,)).fetchone()[0])
+        d["approval"]["requestedBy"] = u
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), LNO))
+        c.commit()
+    finally:
+        c.close()
+
+
+def _do_unlock(page, pw):
+    page.click('[data-testid="qf-unlock-edit"]')
+    page.fill('input[placeholder="输入解鎖密碼"]'.replace("输", "輸"), pw)
+    page.get_by_role("button", name="確認解鎖").click()
+    page.wait_for_selector('[data-testid="qf-unlocked-banner"]', state="visible", timeout=10000)
+
+
+def _server_specs(no):
+    import db
+    c = db.get_db()
+    try:
+        row = c.execute("SELECT spec_files_json, data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    finally:
+        c.close()
+    specs = json.loads(row[0] or "[]")
+    return [s for s in specs if not s.get("staged")], [s for s in specs if s.get("staged")], json.loads(row[1] or "{}")
+
+
+def _pdf_file(tmp_path, name="解鎖規格.pdf"):
+    import io
+    import pypdf
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=200, height=200)
+    b = io.BytesIO()
+    w.write(b)
+    f = tmp_path / name
+    f.write_bytes(b.getvalue())
+    return str(f)
+
+
+@pytest.mark.e2e
+def test_unlock_edit_upload_is_staged_and_relock_discards_it(live_server, make_user, e2e_browser, tmp_path):
+    page, no, pw = _unlock_world(live_server, make_user, e2e_browser, "xn_ul_a")
+    assert page.evaluate(f"() => {ROOT}.specLocked()") is True, "鎖定時規格面板不可操作"
+    _do_unlock(page, pw)
+    assert page.evaluate(f"() => {ROOT}.specLocked()") is False
+    page.locator("[data-testid=qf-spec-input]").set_input_files(_pdf_file(tmp_path))
+    page.wait_for_function(f"() => {ROOT}.specStaged.length === 1", timeout=10000)
+    row = page.locator("[data-testid=qf-spec-row]").first
+    row.wait_for(state="visible", timeout=5000)
+    assert row.get_attribute("data-spec-state") == "staged"
+    assert row.locator("[data-testid=qf-spec-staged-badge]").is_visible()
+    live, staged, _data = _server_specs(no)
+    assert live == [] and len(staged) == 1, "暫存檔不進生效清單"
+    page.once("dialog", lambda d: d.accept())
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specStaged.length === 0", timeout=10000)
+    assert page.locator("[data-testid=qf-spec-row]").count() == 0
+    page.wait_for_timeout(300)
+    live, staged, _data = _server_specs(no)
+    assert live == [] and staged == [], "放棄後暫存檔與紀錄都清掉"
+
+
+@pytest.mark.e2e
+def test_unlock_edit_save_applies_staged_and_pending_delete(live_server, make_user, e2e_browser, tmp_path):
+    page, no, pw = _unlock_world(live_server, make_user, e2e_browser, "xn_ul_b")
+    _do_unlock(page, pw)
+    page.locator("[data-testid=qf-spec-input]").set_input_files(_pdf_file(tmp_path, "甲.pdf"))
+    page.wait_for_function(f"() => {ROOT}.specStaged.length === 1", timeout=10000)
+    sid = page.evaluate(f"() => {ROOT}.specStaged[0].id")
+    page.locator("[data-testid=qf-spec-check]").first.check()
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == [sid]
+    page.locator('[data-testid="qf-unlocked-banner"]').get_by_role("button", name="儲存修改").click()
+    page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specStaged.length === 0 && {ROOT}.specFiles.length === 1", timeout=15000)
+    live, staged, data = _server_specs(no)
+    assert [s["id"] for s in live] == [sid] and staged == [] and data.get("mergeFiles") == [sid]
+    assert "_specChanges" not in data and "_isUnlockEdit" not in data, "解鎖旗標與異動清單不存進單據"
+    row = page.locator("[data-testid=qf-spec-row]").first
+    assert row.get_attribute("data-spec-state") == "ok"
+    # 第二次解鎖：標待刪 → 還原 → 再標待刪 → 放棄 → 回原狀 → 再標待刪 → 儲存才真的刪
+    _do_unlock(page, pw)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("[data-testid=qf-spec-delete]").first.click()
+    page.wait_for_function(f"() => {ROOT}.specPendingDelete.length === 1", timeout=5000)
+    row = page.locator("[data-testid=qf-spec-row]").first
+    assert row.get_attribute("data-spec-state") == "deleting" and row.locator("[data-testid=qf-spec-deleting-badge]").is_visible()
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == [], "待刪的檔不再送勾選"
+    assert _server_specs(no)[0], "標待刪不打 API，伺服器上檔案還在"
+    row.locator("[data-testid=qf-spec-restore]").click()
+    page.wait_for_function(f"() => {ROOT}.specPendingDelete.length === 0", timeout=5000)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("[data-testid=qf-spec-delete]").first.click()
+    page.wait_for_function(f"() => {ROOT}.specPendingDelete.length === 1", timeout=5000)
+    page.once("dialog", lambda d: d.accept())
+    page.click('[data-testid="qf-relock"]')
+    page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specPendingDelete.length === 0", timeout=10000)
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == [sid], "放棄修改後勾選回到原狀"
+    assert page.locator("[data-testid=qf-spec-row]").first.get_attribute("data-spec-state") == "ok"
+    _do_unlock(page, pw)
+    page.once("dialog", lambda d: d.accept())
+    page.locator("[data-testid=qf-spec-delete]").first.click()
+    page.locator('[data-testid="qf-unlocked-banner"]').get_by_role("button", name="儲存修改").click()
+    page.wait_for_function(f"() => !{ROOT}.unlocked && {ROOT}.specFiles.length === 0", timeout=15000)
+    live, staged, data = _server_specs(no)
+    assert live == [] and "mergeFiles" not in data
+    import db
+    c = db.get_db()
+    try:
+        acts = [r[0] for r in c.execute("SELECT action FROM audit_log WHERE username=?", ("xn_ul_b",)).fetchall()]
+    finally:
+        c.close()
+    assert "quotation.apply_spec_changes" in acts, acts
+
+
+@pytest.mark.e2e
+def test_other_field_save_keeps_merge_files(client, live_server, make_user, new_page, login_as):
+    """update 是整份 data 覆蓋：規格面板每次存檔都要帶目前的 mergeFiles（改別的欄位再存檔，勾選不能被清掉）。"""
+    page, no = _saved_quote_page(client, live_server, make_user, new_page, login_as, "xn_e2e_keep")
+    import io
+    import pypdf
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=200, height=200)
+    b = io.BytesIO()
+    w.write(b)
+    h = _token(client, page._xn_user)
+    r = client.post(f"/api/quotations/{no}/spec-files", headers=h, files=[("files", ("k.pdf", b.getvalue(), "application/pdf"))])
+    assert r.status_code == 200, r.text
+    sid = r.json()["specFiles"][0]["id"]
+    page.reload()
+    _wait_form(page)
+    page.wait_for_function(f"() => {ROOT}.specFiles.length === 1", timeout=10000)
+    page.locator("[data-testid=qf-spec-check]").first.check()
+    page.get_by_role("button", name="儲存草稿").click()
+    page.wait_for_function(f"() => !{ROOT}.isDirty", timeout=10000)
+    page.fill("[data-testid=qf-extra-notes]", "只改備註")
+    page.get_by_role("button", name="儲存草稿").click()
+    page.wait_for_function(f"() => !{ROOT}.isDirty", timeout=10000)
+    d = client.get(f"/api/quotations/{no}", headers=h).json()["data"]
+    assert d.get("mergeFiles") == [sid] and d.get("extraNotes") == "只改備註"

@@ -2248,7 +2248,7 @@
             <template x-for="(f, idx) in specRows" :key="f.id">
               <div data-testid="qf-spec-row" :data-spec-state="f.staged ? 'staged' : (specPendingDel(f.id) ? 'deleting' : 'ok')" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;background:#fff"
                    :style="specPendingDel(f.id) ? 'opacity:.6;background:#FEF2F2' : (f.staged ? 'background:#F0FDF4' : '')">
-                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="isStatusLocked() || specPendingDel(f.id)">
+                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="specLocked() || specPendingDel(f.id)">
                 <span data-testid="qf-spec-order" x-show="specSelected(f.id)" style="font-size:11px;font-weight:700;min-width:20px" x-text="(q.mergeFiles || []).indexOf(f.id) + 1 + '.'"></span>
                 <a x-show="!f.staged" href="javascript:void(0)" @click="previewSpec(f)" style="color:var(--accent);font-size:12px" :style="specPendingDel(f.id) ? 'text-decoration:line-through' : 'text-decoration:underline'" x-text="f.name"></a>
                 <span x-show="f.staged" style="font-size:12px" x-text="f.name"></span>
@@ -2258,16 +2258,16 @@
                 <span x-show="f.status && f.status !== 'ok'" data-testid="qf-spec-warn"
                       style="font-size:11px;color:#B91C1C;background:#FEE2E2;border-radius:4px;padding:1px 6px" x-text="specWarn(f)"></span>
                 <span style="margin-left:auto;display:flex;gap:4px">
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-up" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === 0" @click="moveSpec(f.id, -1)">↑</button>
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-down" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === (q.mergeFiles || []).length - 1" @click="moveSpec(f.id, 1)">↓</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-up" x-show="specSelected(f.id)" :disabled="specLocked() || (q.mergeFiles || []).indexOf(f.id) === 0" @click="moveSpec(f.id, -1)">↑</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-down" x-show="specSelected(f.id)" :disabled="specLocked() || (q.mergeFiles || []).indexOf(f.id) === (q.mergeFiles || []).length - 1" @click="moveSpec(f.id, 1)">↓</button>
                   <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-restore" x-show="specPendingDel(f.id)" @click="restoreSpec(f.id)">還原</button>
-                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" x-show="!specPendingDel(f.id)" style="color:#B91C1C" :disabled="isStatusLocked()" @click="deleteSpecFile(f)" x-text="f.staged ? '移除' : '刪除'">刪除</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" x-show="!specPendingDel(f.id)" style="color:#B91C1C" :disabled="specLocked()" @click="deleteSpecFile(f)" x-text="f.staged ? '移除' : '刪除'">刪除</button>
                 </span>
               </div>
             </template>
             <div x-show="!specRows.length" style="font-size:11px;color:var(--text-dim);padding:4px 0">尚無規格文件。</div>
             <label data-testid="qf-spec-upload" style="display:inline-block;margin-top:4px;padding:5px 12px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer"
-                   :style="(isStatusLocked() || specUploading) ? 'opacity:.5;pointer-events:none' : ''">
+                   :style="(specLocked() || specUploading) ? 'opacity:.5;pointer-events:none' : ''">
               <span x-text="specUploading ? '上傳中…' : '＋ 上傳規格 PDF'"></span>
               <input type="file" multiple accept=".pdf,application/pdf" style="display:none" data-testid="qf-spec-input" @change="uploadSpecFiles($event)">
             </label>
@@ -3976,6 +3976,8 @@
         const byId = new Map(all.map(f => [f.id, f]))
         return [...sel.map(id => byId.get(id)).filter(Boolean), ...all.filter(f => !sel.includes(f.id))]
       },
+      // 規格面板鎖定：已送出／已駁回、或待審核／簽核中且尚未解鎖編輯（只有最高管理者解鎖後才可處理規格檔）
+      specLocked() { return this.isStatusLocked() || (this.isPendingStatus() && !this.unlocked) },
       get specAll() { return [...this.specFiles, ...this.specStaged.map(f => ({ ...f, staged: true }))] },
       get specCount() { return this.specAll.filter(f => !this.specPendingDel(f.id)).length },
       specPendingDel(id) { return this.specPendingDelete.includes(id) },
@@ -5210,6 +5212,7 @@
         this.q.signedLog = row.signed_log || []
         this.q.signedFiles = row.signed_files || []
         this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
+        this._specClearLocal()
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
           this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })
