@@ -1,5 +1,5 @@
 {
- "core_version": "1.172",
+ "core_version": "1.173",
  "interface": {
   "core:archive": {
    "BackupInProgress": "class",
@@ -1998,6 +1998,20 @@
    "rate_text": "def(pct)",
    "rules_config": "def(conn=…)"
   },
+  "helper:quote_brand_label": {
+   "APPLIES_TO": "const",
+   "COLUMNS": "const",
+   "KEY": "const",
+   "MAX_LEN": "const",
+   "applies": "def(doc_type)",
+   "change_reasons": "def(q)",
+   "default_of": "def(col)",
+   "label_of": "def(q, col)",
+   "labels_of": "def(q)",
+   "normalize": "def(col, raw)",
+   "presets_of": "def(col)",
+   "sanitize": "def(q)"
+  },
   "helper:quote_email": {
    "PROFILE_KEY": "const",
    "company_external_email": "def()",
@@ -2008,6 +2022,15 @@
    "resolve_for_row": "def(row)",
    "resolve_for_user_id": "def(user_id)",
    "valid": "def(email)"
+  },
+  "helper:quote_item_notes": {
+   "INLINE": "const",
+   "JOINER": "const",
+   "LAYOUTS": "const",
+   "WRAP": "const",
+   "clean_items": "def(data)",
+   "flatten_inline": "def(text)",
+   "layout_of": "def(item)"
   },
   "helper:quote_output": {
    "TERMS": "const",

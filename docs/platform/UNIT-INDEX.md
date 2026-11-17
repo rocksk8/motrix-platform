@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 185 個；有單位卡 126 個。
+單位 187 個；有單位卡 127 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -141,7 +141,9 @@
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:profit_rules` | L1 | 報價單／精算的利潤規則（第 48 班 S1；設計稿 docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md）。（無單位卡） | 17 | 5 | — |
 | `helper:profit_warning` | L1 | T64 A：利潤提醒色帶與報價單預設有效天數的讀取（只讀設定；預設＝各畫面今天寫死的數字）。 | 10 | 9 | `backend/tests/platform/test_profit_warning_t64.py` |
+| `helper:quote_brand_label` | L1 | 報價單品項表欄名可自訂（2026-11-17 使用者裁示）：「品名 / 規格說明」與「廠牌 / 型號」兩欄。 | 12 | 2 | — |
 | `helper:quote_email` | L1 | 報價用公司信箱（2026-11-13，使用者需求）：有些人用私人信箱註冊帳號，但報價單要用公司信箱。 | 9 | 5 | `tests/test_quote_email_2026_11_13.py` |
+| `helper:quote_item_notes` | L1 | 報價單／估價單品項下方「備註」的排版選項（2026-11-17，使用者要求每個品項各自選）。（無單位卡） | 7 | 2 | — |
 | `helper:quote_output` | L1 | 報價單輸出的設定使用端（T63 Q0）：被管理者隱藏的報價條件欄位，PDF／預覽要不要照印。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:quote_privacy` | L1 | 報價單個人資料欄位的設定使用端（T63 Q0）：客戶電子郵件／傳真能不能被管理者隱藏。 | 1 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
