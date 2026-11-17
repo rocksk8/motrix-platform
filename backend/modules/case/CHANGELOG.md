@@ -14,6 +14,10 @@
 - 前端（只加提示，不改計算與資料）：`settlement.html` 品項稅別為「未稅」「含稅5%」且已填、非採用系統採購、非人力時，稅別選單下多一行稅基提醒（建議改選「含稅5%（自動加總）」）；舊精算不自動遷移（使用者裁示）。
 - 測試：`tests/test_closing_report_amounts_2026_11_17.py`（資料取 MQ-202607-045 的形狀）。
 - 結案報表表頭日期（使用者 2026-11-17 裁示；此項只涉及日期字樣）：①成案日期取值順序＝稽核紀錄最後一次轉成「已成案」→ 報價單存的 `dealWonAt`（稽核保留期限過後仍在）→ 客戶回簽日（`signed_at`）→「—」。②第三節標題改印「精算日期（手填）：…　完結日期：…　完結人：…」，完結日期取 `finalizedAt` 轉台灣時間；完結人／完結時間缺就退回編輯歷程最後一筆 `settlement_finalized`；尚未完結只在表頭加印手填精算日期。③`settlement_api.py`：完結時用戶端沒帶 `finalizedBy`／`finalizedAt`（舊頁面、腳本）由伺服器補上操作者與當下時間；用戶端有帶的維持原值。測試：`tests/test_closing_report_dates_2026_11_17.py`、`modules/case/tests/test_settlement_finalized_by_fill_2026_11_17.py`。
+- **（併入）(next) — 2026-11-17（fix/settlement-save-409；精算存檔 409 診斷；版號由列車取）**
+- 診斷（無狀態碼、回應本文、權限變更）：精算存檔的三種 409 各帶固定詞彙的 `X-Fail-Reason`——`stale_version`（樂觀鎖版本過期）、`finalize_mismatch`（完結前重算與畫面不一致）、`not_won`（未成案）；`X-Fail-Detail` 只放欄位名稱／版本戳記，不放金額。
+- 稽核：失敗稽核（`fail.PUT`）`detail.msg`／`last_reason`／`last_msg` 記原因與版本戳記（資料庫現值在前、頁面帶的值截斷）；成功存檔的 `quotation.settlement` 稽核記回給頁面的 `updated_at`。
+- 測試：補存檔後再存／完結不誤報衝突的回歸測試與 e2e。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。

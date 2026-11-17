@@ -19,6 +19,16 @@ from modules.case.quotations import save_quotation_json
 router = APIRouter()
 
 
+def _fail(code: str, detail: str = "") -> dict:
+    """失敗原因碼放回應標頭 X-Fail-Reason（固定詞彙，見 helpers.audit._FAIL_REASON_LABELS）；main.py 的失敗稽核據此記 reason_code。回應本文與狀態碼不變。
+    detail＝簡短分類文字（只放欄位名稱，**不放金額**），百分比編碼放 X-Fail-Detail（標頭只能 ASCII），稽核列 detail.msg 記它。"""
+    h = {"X-Fail-Reason": code}
+    if detail:
+        from urllib.parse import quote
+        h["X-Fail-Detail"] = quote(detail[:120], safe="")
+    return h
+
+
 # ── Settlement ────────────────────────────────────────────────────────────────
 
 class SettlementIn(BaseModel):
@@ -76,10 +86,10 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             raise
         if body.settlement.get("status") == "finalized" and (row["deal_tag"] or "") not in ("已成案", "已結案"):      # 40：沒成案的報價單不能完結精算（已結案＝管理員重新開啟後再完結）
             conn.close()
-            raise HTTPException(409, "這張報價單尚未成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"))
+            raise HTTPException(409, "這張報價單尚未成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"), headers=_fail("not_won"))
         if body.expectedUpdatedAt is not None and (row["updated_at"] or "") != body.expectedUpdatedAt:      # 38：樂觀鎖——兩人（或兩個分頁）同時編輯，後存的不再悄悄蓋掉前存的
             conn.close()
-            raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存")
+            raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存", headers=_fail("stale_version", "資料庫現值 %s／頁面帶 %s" % (row["updated_at"] or "", str(body.expectedUpdatedAt)[:40])))      # 版本戳記是時間字串（非金額）：看是頁面帶舊值、資料庫被改過、還是格式不同
         data = json.loads(row["data_json"] or "{}")
         existing_settlement = data.get("settlement") or {}
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
@@ -120,7 +130,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:
                 conn.close()
-                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在您編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
+                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在您編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs), headers=_fail("finalize_mismatch", "、".join(x.split("：", 1)[0] for x in diffs)))      # 稽核只記哪些欄位不一致，金額留在回應本文
         if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）
@@ -165,7 +175,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
                f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
-               {"rev": settle_rev, **({"reason": reopen_reason, "from": "finalized"} if was_final else {})})
+               {"rev": settle_rev, "updated_at": now, **({"reason": reopen_reason, "from": "finalized"} if was_final else {})})      # updated_at＝這次回給頁面的版本戳記：之後若有 409，可與 fail 列的「頁面帶的／資料庫現值」對照
         if is_finalized:
             notify_settlement_finalized(
                 quote_no, cname,
