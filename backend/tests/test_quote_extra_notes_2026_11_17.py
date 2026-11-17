@@ -43,6 +43,29 @@ def pdf(monkeypatch):
 
 # ── 1. 輸出 ───────────────────────────────────────────────────────────────
 
+def _at(html, pat, start=0):
+    """regex 找位置（不用文字子字串錨點）；找不到就紅。"""
+    m = re.compile(pat).search(html, start)
+    assert m, pat
+    return m.start()
+
+
+def _tags(html):
+    """用 HTML 解析器列出 (標籤, 屬性, (行, 欄))——以結構判斷，不靠文字子字串。"""
+    from html.parser import HTMLParser
+    out = []
+
+    class _P(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            out.append((tag, dict(attrs), self.getpos()))
+    _P().feed(html)
+    return out
+
+
+def _xn_page(html):
+    return html[_at(html, r'<table class="xn-page">'):]
+
+
 def test_no_notes_output_is_byte_identical_to_old(pdf):
     """沒填（缺鍵、空字串、全空白、非字串）⇒ HTML 與沒有這個功能時逐位元相同：不多標籤、不多樣式。"""
     base = pdf._build_quote_html(_quote(), TOT)
@@ -54,23 +77,25 @@ def test_no_notes_output_is_byte_identical_to_old(pdf):
 @pytest.mark.parametrize("internal", [False, True])
 def test_notes_page_after_signature_outside_root(pdf, internal):
     html = pdf._build_quote_html(_quote(extraNotes=NOTES), TOT, internal=internal)
-    assert html.count('class="xn-page"') == 1
-    i_sign = html.index("買方確認")
-    i_page = html.index('<table class="xn-page">')
-    i_root_close = html.index("</div>\n</div>\n<style>.xn-page")
+    tags = _tags(html)
+    assert sum(1 for tg, a, _p in tags if tg == "table" and a.get("class") == "xn-page") == 1
+    i_sign = _at(html, "買方確認")
+    i_page = _at(html, r'<table class="xn-page">')
+    i_root_close = _at(html, r"</div>\n</div>\n<style>\.xn-page")
     assert i_sign < i_root_close < i_page, "備註頁在簽章之後，且在 #root 結束之後（FIT_A4_MULTI 以 #root 高度縮放，備註頁不可算進去）"
-    assert html.index("fit_a4") if False else True
-    assert html.rindex("<script>") > i_page, "A4 縮放腳本仍在最後"
+    table_pos = next(p for tg, a, p in tags if tg == "table" and a.get("class") == "xn-page")
+    assert [p for tg, _a, p in tags if tg == "script"][-1] > table_pos, "A4 縮放腳本仍在最後"
 
 
 def test_notes_page_reuses_existing_quote_styles(pdf):
     """風格＝報價單既有：小標 .section-label、內容 .term-item／.term-block、抬頭 .header／.doc-title、頁尾 .footer；不另開一套顏色。"""
     html = pdf._build_quote_html(_quote(extraNotes=NOTES), TOT)
-    page = html[html.index('<table class="xn-page">'):]
+    page = _xn_page(html)
     for cls in ('class="section-label"', 'class="term-item term-item--full"', 'class="term-block"',
                 'class="header"', 'class="doc-title"', 'class="footer"', 'class="accent-bar"'):
         assert cls in page, cls
-    css = html[html.index("<style>.xn-page"):html.index("</style>", html.index("<style>.xn-page"))]
+    css_at = _at(html, r"<style>\.xn-page")
+    css = html[css_at:_at(html, "</style>", css_at)]
     assert not re.search(r"#[0-9A-Fa-f]{3,6}|rgb\(", css), "新增的 CSS 不可自己定義顏色（顏色一律來自既有 class）"
     assert "<thead>" in page and "<tfoot>" in page, "續頁重複抬頭與頁尾靠 thead／tfoot"
 
@@ -86,7 +111,7 @@ def test_section_number_follows_existing_sections(pdf):
 def test_notes_content_is_escaped_and_newlines_kept(pdf):
     evil = "<script>alert(1)</script>\n- 條列 & \"引號\"\n   縮排\n\n結尾"
     html = pdf._build_quote_html(_quote(extraNotes=evil), TOT)
-    page = html[html.index('<table class="xn-page">'):]
+    page = _xn_page(html)
     assert "<script>alert(1)</script>" not in page
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
     assert "- 條列 &amp; &quot;引號&quot;" in page
@@ -96,20 +121,20 @@ def test_notes_content_is_escaped_and_newlines_kept(pdf):
 
 def test_notes_over_limit_is_cut_at_output(pdf):
     html = pdf._build_quote_html(_quote(extraNotes="囧" * 25000), TOT)
-    assert html.count("囧") == 20000
+    assert len(re.findall("囧", html)) == 20000
 
 
 def test_estimate_uses_estimate_wording(pdf):
     html = pdf._build_quote_html(_quote(extraNotes=NOTES, docType="estimate", quoteNo="ME-202611-001"), TOT)
-    page = html[html.index('<table class="xn-page">'):]
+    page = _xn_page(html)
     assert "估　價　單" in page and "估價單號：ME-202611-001" in page
     assert "報價編號" not in page
 
 
 def test_notes_page_carries_quote_no_in_repeated_header(pdf):
     html = pdf._build_quote_html(_quote(extraNotes=NOTES), TOT)
-    page = html[html.index('<table class="xn-page">'):]
-    thead = page[page.index("<thead>"):page.index("</thead>")]
+    page = _xn_page(html)
+    thead = page[_at(page, "<thead>"):_at(page, "</thead>")]
     assert "MQ-202611-001" in thead and "報價編號：" in thead
 
 

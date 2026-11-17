@@ -267,7 +267,7 @@ def test_save_applies_adds_and_removes_in_one_transaction_and_resubmits(client, 
     assert "fresh.pdf" in last["changes"][0]["to"] and "live.pdf" in last["changes"][0]["to"]
     acts = [a["action"] for a in _q("SELECT action FROM audit_log WHERE target_id=?", (NO,))]
     assert "quotation.stage_spec_files" in acts and "quotation.apply_spec_changes" in acts and "quotation.unlock_edit" in acts
-    detail = _q("SELECT detail FROM audit_log WHERE action='quotation.apply_spec_changes'")[0]["detail"]
+    detail = _q("SELECT detail FROM audit_log WHERE action='quotation.apply_spec_changes' AND target_id=?", (NO,))[0]["detail"]
     assert "fresh.pdf" in detail and "live.pdf" in detail
 
 
@@ -512,8 +512,12 @@ def test_create_historical_quotation_does_not_store_spec_changes(client, world):
 
 
 def test_review_edit_pops_spec_changes_before_any_validation():
+    """review_edit 的控制旗標清單要含 _specChanges，且在驗證／存檔之前（AST 找結構，不靠文字子字串）。"""
+    import ast
     import inspect
+    import textwrap
     from modules.case.api import quotations as Q
-    src = inspect.getsource(Q.review_edit_quotation)
-    i = src.index('"_specChanges"')
-    assert i < src.index("_check_extra_notes(q)"), "review_edit 的控制旗標清單要含 _specChanges，且在驗證／存檔之前"
+    fn = ast.parse(textwrap.dedent(inspect.getsource(Q.review_edit_quotation))).body[0]
+    flag = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Constant) and n.value == "_specChanges"]
+    check = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_check_extra_notes"]
+    assert flag and check and min(flag) < min(check)

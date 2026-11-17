@@ -395,7 +395,7 @@ def test_pdf_download_merges_and_sets_skipped_header_only_when_needed(client, wo
     assert json.loads(unquote(r.headers["X-Pdf-Merge-Skipped"])) == [{"id": ids["e.pdf"], "name": "e.pdf", "reason": "encrypted"}]
     text = "".join((p.extract_text() or "") for p in pypdf.PdfReader(io.BytesIO(r.content)).pages)
     assert "encrypted" not in text and "e.pdf" not in text                           # 原因不印在客戶的 PDF 上
-    det = json.loads(_q("SELECT detail FROM audit_log WHERE action='quotation.export_pdf' ORDER BY id DESC LIMIT 1")[0]["detail"])
+    det = json.loads(_q("SELECT detail FROM audit_log WHERE action='quotation.export_pdf' AND target_id=? ORDER BY id DESC LIMIT 1", (Q,))[0]["detail"])
     assert det["mergeSkipped"] == [{"name": "e.pdf", "reason": "encrypted"}]
 
 

@@ -13,6 +13,7 @@ import pytest
 pytestmark = requires_module("case", "本檔打 M01（報價單）的表單頁與設定端點")
 
 pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import expect  # noqa: E402
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
 NOTES = "備註事項：\n一、車體規格\n   - 車體尺寸：L1200\n\n九、結尾"
@@ -46,7 +47,7 @@ def test_notes_typing_counter_and_roundtrip(client, live_server, make_user, new_
     assert box.get_attribute("maxlength") == "20000"
     assert "0 / 20000" in page.locator("[data-testid=qf-extra-notes-count]").inner_text()
     box.fill(NOTES)
-    assert f"{len(NOTES)} / 20000" in page.locator("[data-testid=qf-extra-notes-count]").inner_text()
+    expect(page.locator("[data-testid=qf-extra-notes-count]")).to_contain_text(f"{len(NOTES)} / 20000")
     assert page.evaluate(f"() => {ROOT}.q.extraNotes") == NOTES
 
     page.evaluate(f"() => {{ const d = {ROOT}; d.q.customerName = '備註客戶'; d.q.projectName = '備註專案'; "
@@ -77,24 +78,24 @@ def test_template_apply_replace_append_cancel(client, live_server, make_user, ne
     box = page.locator("[data-testid=qf-extra-notes]")
     page.locator("[data-testid=qf-notes-tpl-toggle]").click()
     items = page.locator("[data-testid=qf-notes-tpl-item]")
-    assert items.count() == 2
-    assert not page.locator("[data-testid=qf-notes-tpl-filter]").is_visible(), "≤10 個不出現篩選"
+    expect(items).to_have_count(2)
+    expect(page.locator("[data-testid=qf-notes-tpl-filter]")).not_to_be_visible()          # ≤10 個不出現篩選
 
     items.nth(0).click()                                         # 空框 ⇒ 直接套用、不問
-    assert box.input_value() == "範本00 內容\n  - 條列"
-    assert not page.locator("[data-testid=qf-notes-tpl-ask]").is_visible()
+    expect(box).to_have_value("範本00 內容\n  - 條列")
+    expect(page.locator("[data-testid=qf-notes-tpl-ask]")).not_to_be_visible()
 
     items.nth(1).click()                                         # 有內容 ⇒ 先問
     ask = page.locator("[data-testid=qf-notes-tpl-ask]")
     ask.wait_for(state="visible", timeout=5000)
-    assert box.input_value() == "範本00 內容\n  - 條列", "沒選之前內容不動"
+    expect(box).to_have_value("範本00 內容\n  - 條列")                          # 沒選之前內容不動
     page.locator("[data-testid=qf-notes-tpl-append]").click()
-    assert box.input_value() == "範本00 內容\n  - 條列\n\n範本01 內容\n  - 條列"
+    expect(box).to_have_value("範本00 內容\n  - 條列\n\n範本01 內容\n  - 條列")
     ask.wait_for(state="hidden", timeout=5000)
 
     items.nth(0).click()
     page.locator("[data-testid=qf-notes-tpl-replace]").click()
-    assert box.input_value() == "範本00 內容\n  - 條列"
+    expect(box).to_have_value("範本00 內容\n  - 條列")
 
     items.nth(1).click()
     ask.get_by_text("取消").click()
@@ -113,14 +114,14 @@ def test_template_filter_only_above_ten(client, live_server, make_user, new_page
     page.wait_for_function(f"() => {ROOT}.notesTpls.length === 12", timeout=8000)
     page.locator("[data-testid=qf-notes-tpl-toggle]").click()
     page.locator("[data-testid=qf-notes-tpl-filter]").wait_for(state="visible", timeout=5000)
-    assert page.locator("[data-testid=qf-notes-tpl-item]").count() == 12
+    expect(page.locator("[data-testid=qf-notes-tpl-item]")).to_have_count(12)
     page.locator("[data-testid=qf-notes-tpl-search]").fill("範本03")
-    assert page.locator("[data-testid=qf-notes-tpl-item]").count() == 1
+    expect(page.locator("[data-testid=qf-notes-tpl-item]")).to_have_count(1)
     page.locator("[data-testid=qf-notes-tpl-search]").fill("")
     page.locator("[data-testid=qf-notes-tpl-filter] button", has_text="AGV").click()
-    assert page.locator("[data-testid=qf-notes-tpl-item]").count() == 6      # 奇數編號 6 個
+    expect(page.locator("[data-testid=qf-notes-tpl-item]")).to_have_count(6)      # 奇數編號 6 個
     page.locator("[data-testid=qf-notes-tpl-filter] button", has_text="全部").click()
-    assert page.locator("[data-testid=qf-notes-tpl-item]").count() == 12
+    expect(page.locator("[data-testid=qf-notes-tpl-item]")).to_have_count(12)
 
 
 @pytest.mark.e2e
@@ -142,7 +143,7 @@ def test_manage_templates_superadmin_only_and_saves(client, live_server, make_us
     page.locator("[data-testid=qf-notes-mgr]").wait_for(state="visible", timeout=5000)
     page.get_by_text("以目前備註內容新增").click()
     row = page.locator("[data-testid=qf-notes-mgr-item]").first
-    assert row.locator("textarea").input_value() == "要存成範本的內容\n  - 條列"
+    expect(row.locator("textarea")).to_have_value("要存成範本的內容\n  - 條列")
 
     dialogs = []
     page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
