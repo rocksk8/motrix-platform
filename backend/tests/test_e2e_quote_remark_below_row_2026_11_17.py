@@ -97,3 +97,99 @@ def test_remarks_render_as_full_width_row_under_each_item(live_server, make_user
     m2 = _frame(page).evaluate(_MEASURE)
     assert m2["cols"] == 9 and "備註" not in m2["heads"]
     assert len(m2["rem"]) == 2 and all(r["w"] > m2["tw"] * 0.6 for r in m2["rem"]), m2
+
+
+# ───────────── 欄寬依內容自動分配：長料號不被拆行、數字欄不溢出（同一個預覽 iframe）─────────────
+def _seed_widths(quote_no, brand, name, price):
+    import db
+    items = [{"id": 1, "description": name, "brand": brand, "qty": 1, "unit": "台", "cost": int(price * .7),
+              "margin": 0.3, "unitPrice": price, "amount": price, "notes": ""},
+             {"id": 2, "description": "網路攝影機 4MP", "brand": "CAM-1", "qty": 2, "unit": "台", "cost": 3000,
+              "margin": 0.3, "unitPrice": 5200, "amount": 10400, "notes": ""}]
+    data = {"quoteNo": quote_no, "customerName": "欄寬客戶", "projectName": "欄寬專案", "status": "草稿",
+            "items": items, "tot": {"total": 105000, "pretax": 100000, "directMarginPct": 0, "netMarginPct": 0}}
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+            "data_json, created_at, updated_at, deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (quote_no, "草稿", "欄寬客戶", "欄寬專案", 105000, 100000, json.dumps(data, ensure_ascii=False),
+             "2026-11-01T00:00:00", "2026-11-01T00:00:00", "", "2026-11-01"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_FIT = """() => {
+  const tbl = document.querySelector('#root table');
+  const rows = [...tbl.querySelectorAll('tbody tr')].filter(r => r.cells.length > 2);
+  const lineH = c => { const s = getComputedStyle(c); return parseFloat(s.lineHeight) || 20; };
+  const first = rows[0];
+  return {
+    fixed: getComputedStyle(tbl).tableLayout,
+    overflowX: tbl.scrollWidth - tbl.clientWidth,
+    brandLines: rows.map(r => Math.round((r.cells[2].getBoundingClientRect().height - 16) / lineH(r.cells[2]))),
+    numOverflow: rows.map(r => [...r.querySelectorAll('td.r')].some(c => c.scrollWidth > c.clientWidth + 1)),
+    widths: [...first.cells].map(c => Math.round(c.getBoundingClientRect().width)),
+    cols: tbl.querySelectorAll('thead th').length,
+  };
+}"""
+
+
+@pytest.mark.e2e
+def test_long_part_number_stays_on_one_line_and_numbers_do_not_overflow(live_server, make_user, e2e_browser):
+    username, password = make_user(username="e2e_rm2", role="superadmin")
+    no = "MQ-202611-172"
+    _seed_widths(no, "SR-S-VMS-Mini2-516-AID04", "主機", 86100)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}")
+    page.wait_for_function("() => document.body.innerText.includes('欄寬客戶')", timeout=20000)
+    page.evaluate(f"{DATA_JS}.openPreview('external')")
+    m = _frame(page).evaluate(_FIT)
+    assert m["fixed"] == "fixed" and m["cols"] == 7, m
+    assert m["brandLines"][0] == 1, ("SR-S-VMS-Mini2-516-AID04 不可拆行", m)
+    assert m["overflowX"] <= 1 and not any(m["numOverflow"]), m
+    # 欄寬真的被調過：廠牌欄 > 預設 110，數字欄不比預設 120 寬（預覽 iframe 有縮放，比例換算）
+    scale = m["widths"][2] / max(m["widths"][1], 1)
+    assert m["widths"][2] > 110 * 0.6 and m["widths"][5] <= m["widths"][2] * 1.2, (m, scale)
+
+    # 內部版：9 欄、不溢出
+    page.evaluate(f"{DATA_JS}.previewMode = 'internal'")
+    page.wait_for_function(f"() => {DATA_JS}.previewHtml.includes('30.0%')", timeout=20000)
+    time.sleep(0.5)
+    m2 = _frame(page).evaluate(_FIT)
+    assert m2["cols"] == 9 and m2["overflowX"] <= 1 and not any(m2["numOverflow"]), m2
+
+
+@pytest.mark.e2e
+def test_short_part_numbers_keep_the_default_table(live_server, make_user, e2e_browser):
+    username, password = make_user(username="e2e_rm3", role="superadmin")
+    no = "MQ-202611-173"
+    _seed_widths(no, "HDD-8TB", "硬碟", 7800)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}")
+    page.wait_for_function("() => document.body.innerText.includes('欄寬客戶')", timeout=20000)
+    page.evaluate(f"{DATA_JS}.openPreview('external')")
+    m = _frame(page).evaluate(_FIT)
+    assert m["fixed"] == "auto" and m["cols"] == 7, m
+
+
+@pytest.mark.e2e
+def test_big_amounts_with_long_part_number_do_not_overflow(live_server, make_user, e2e_browser):
+    username, password = make_user(username="e2e_rm4", role="superadmin")
+    no = "MQ-202611-174"
+    _seed_widths(no, "ABCDEFGHIJ-0123456789", "超大專案", 98765432)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}")
+    page.wait_for_function("() => document.body.innerText.includes('欄寬客戶')", timeout=20000)
+    for mode in ("external", "internal"):
+        page.evaluate(f"{DATA_JS}.openPreview('{mode}')")
+        if mode == "internal":
+            page.wait_for_function(f"() => {DATA_JS}.previewHtml.includes('30.0%')", timeout=20000)
+            time.sleep(0.5)
+        m = _frame(page).evaluate(_FIT)
+        # 客戶版：料號一行；內部版欄多（含成本／毛利率）又是千萬級金額，料號允許在「-」處換成兩行（不溢出、不拆字中間）
+        assert m["overflowX"] <= 1 and not any(m["numOverflow"]) and m["brandLines"][0] <= (1 if mode == "external" else 2), (mode, m)

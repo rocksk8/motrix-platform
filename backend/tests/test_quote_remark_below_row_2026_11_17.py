@@ -89,3 +89,66 @@ def test_estimate_doc_type_shares_the_same_table():
         assert LONG in t and "含安裝" in t
         assert h.count("<th") - h.count("<thead") == ncols                  # 沒有備註欄
         assert ">備註</th>" not in h
+
+
+# ───────────── 欄寬依內容自動分配（品名／廠牌型號，數字欄縮到剛好放得下最大金額）─────────────
+def _rows(brand="HDD-8TB", name="硬碟", price=7800, notes=""):
+    return {"quoteNo": "MQ-T-2", "customerName": "甲", "items": [
+        {"type": "item", "id": "a", "description": name, "brand": brand, "unit": "台", "qty": 1,
+         "unitPrice": price, "amount": price, "cost": int(price * .7), "margin": .3, "notes": notes}]}
+
+
+def _widths(items, internal=False):
+    return pdf_gen._quote_col_widths(items, internal)
+
+
+def test_short_part_numbers_and_normal_amounts_leave_the_layout_untouched():
+    q = _rows()
+    assert _widths(q["items"]) is None and _widths(q["items"], True) is None
+    h = _html(q)
+    assert "<colgroup>" not in h and "table-layout" not in h and "<table>\n  <thead>" in h
+
+
+def test_long_part_number_widens_brand_column_and_numeric_columns_give_way():
+    q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")
+    w = _widths(q["items"])                                    # # 品名 廠牌 數量 單位 單價 金額
+    assert len(w) == 7 and abs(sum(w) - 695) <= 1, w
+    assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 22 and w[2] > 110
+    assert w[5] <= 120 and w[6] <= 120 and w[1] >= 100        # 數字欄不比預設寬，品名欄保有最小寬度
+    h = _html(q)
+    assert '<table class="items">' in h and h.count("<col ") == 7
+    assert "table.items{table-layout:fixed}" in h
+
+
+def test_long_name_short_part_number_widens_name_and_shrinks_brand():
+    q = _rows(brand="HDD-8TB", name="監控級硬碟 8TB，7x24 小時運轉專用，含安裝與資料遷移，附原廠保固卡與出貨檢測報告")
+    w = _widths(q["items"])
+    assert w[1] > 190 and w[2] < 110 and w[2] >= 90 and abs(sum(w) - 695) <= 1, w
+
+
+def test_big_amounts_get_their_width_and_never_below_the_need():
+    q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="y", price=98765432)
+    w = _widths(q["items"])
+    need = int(pdf_gen._est_px("NT$ 98,765,432") + 22)
+    assert w[5] >= need and w[6] >= need and abs(sum(w) - 695) <= 1, (w, need)
+    wi = _widths(q["items"], internal=True)                    # # 品名 廠牌 數量 單位 成本 毛利率 單價 金額
+    assert len(wi) == 9 and abs(sum(wi) - 695) <= 1 and wi[7] >= int(pdf_gen._est_px("NT$ 98,765,432") + 14)
+
+
+def test_internal_version_has_nine_columns_and_tighter_padding():
+    q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")
+    h = _html(q, internal=True)
+    assert h.count("<col ") == 9 and "padding-left:5px;padding-right:5px" in h
+
+
+def test_widths_do_not_depend_on_header_text():
+    """欄寬只看品項資料（h17 讓「廠牌 / 型號」欄名可自訂）：函式只收 items／internal／total，改欄名不影響欄寬。"""
+    import inspect
+    assert list(inspect.signature(pdf_gen._quote_col_widths).parameters) == ["items", "internal", "total"]
+
+
+def test_cost_cell_tint_is_pinned_when_remark_rows_shift_the_zebra():
+    """h19 審查：備註列讓 nth-child 奇偶錯位 ⇒ 成本欄橘底忽有忽無；有備註時成本欄底色固定（品項列橘、z 列灰）。"""
+    h = _html(_q(), internal=True)
+    a, b = h.index("tbody tr td.cost-cell{background:#FFF8F0}"), h.index("tbody tr.z td{background:#FAFAF8}")
+    assert h.index("tbody tr:nth-child(even) td{background:none}") < a < b
