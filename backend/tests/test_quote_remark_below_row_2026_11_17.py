@@ -8,6 +8,7 @@
 - 整張單都沒有備註 ⇒ 輸出沒有任何新 class／CSS（與 pdf_golden 逐位元相同的前提）
 """
 import re
+from html.parser import HTMLParser
 
 import pdf_gen
 
@@ -26,32 +27,139 @@ def _html(q, internal=False):
     return pdf_gen._build_quote_html(q, {"subtotal": 300, "pretax": 300, "tax": 15, "total": 315}, internal=internal)
 
 
-def _table(html):
-    return html[html.index("<tbody>"):html.index("</tbody>")]
+# ── 以結構讀 HTML／CSS（不靠文字子字串定位或計數；T87 A2 規則）──
+_VOID = {"col", "br", "meta", "img", "hr", "input", "link"}
+
+
+class _N:
+    def __init__(self, tag, attrs, parent):
+        self.tag, self.attrs, self.parent, self.kids = tag, dict(attrs), parent, []
+        self.cls = set((self.attrs.get("class") or "").split())
+
+    @property
+    def text(self):
+        return "".join(k if isinstance(k, str) else k.text for k in self.kids)
+
+    def walk(self):
+        for k in self.kids:
+            if isinstance(k, _N):
+                yield k
+                yield from k.walk()
+
+    def all(self, tag):
+        return [n for n in self.walk() if n.tag == tag]
+
+
+class _P(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = self.cur = _N("#root", [], None)
+
+    def handle_starttag(self, tag, attrs):
+        n = _N(tag, attrs, self.cur)
+        self.cur.kids.append(n)
+        if tag not in _VOID:
+            self.cur = n
+
+    def handle_startendtag(self, tag, attrs):
+        self.cur.kids.append(_N(tag, attrs, self.cur))
+
+    def handle_endtag(self, tag):
+        n = self.cur
+        while n is not None and n.tag != tag:
+            n = n.parent
+        if n is not None and n.parent is not None:
+            self.cur = n.parent
+
+    def handle_data(self, d):
+        self.cur.kids.append(d)
+
+
+def _parse(html):
+    p = _P()
+    p.feed(html)
+    p.close()
+    return p.root
+
+
+class _Row:
+    def __init__(self, tr):
+        self.cls = tr.cls
+        self.cells = [c for c in tr.kids if isinstance(c, _N) and c.tag == "td"]
+        self.spans = [int(c.attrs.get("colspan", 1)) for c in self.cells]
+        self.text = tr.text
+
+
+def _tbody_rows(html):
+    """品項表 tbody 的每一列（依序）。"""
+    tb = _parse(html).all("tbody")[0]
+    return [_Row(tr) for tr in tb.all("tr")]
+
+
+def _remarks(rows):
+    return [r for r in rows if "remark-row" in r.cls]
+
+
+def _ths(html):
+    return _parse(html).all("thead")[0].all("th")
+
+
+def _rbox_lines(html):
+    """每個備註方框的內容，依 <br> 切成行（文字已還原逸出）；方框裡出現未逸出的標籤會留下 [tag] 記號讓比對失敗。"""
+    out = []
+    for n in _parse(html).walk():
+        if n.tag == "div" and "rbox" in n.cls:
+            lines = [""]
+            for k in n.kids[1:]:                                   # 第 0 個是「備註」小標
+                if isinstance(k, str):
+                    lines[-1] += k
+                elif k.tag == "br":
+                    lines.append("")
+                else:
+                    lines[-1] += "[%s]" % k.tag
+            out.append(lines)
+    return out
+
+
+def _css_rules(html):
+    """<style> 內每條規則 ⇒ [(選擇器, 宣告)]，依出現順序。"""
+    css = "".join(st.text for st in _parse(html).all("style"))
+    return [(m.group(1).strip(), m.group(2).strip()) for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css)]
+
+
+def _rule_pos(rules, sel, body=None):
+    return [i for i, (a, b) in enumerate(rules) if a == sel and (body is None or b == body)]
 
 
 def test_remark_goes_below_the_item_row_full_width():
     h = _html(_q())
     assert "<th style=\"width:72px\">備註</th>" not in h
-    rows = re.findall(r'<tr class="remark-row[^"]*"><td></td><td colspan="(\d+)"><div class="rbox"><b>備註</b>(.*?)</div></td></tr>', _table(h))
-    assert [c for c, _ in rows] == ["6", "6"]                  # 長備註與短備註「含安裝」一律下移
-    assert rows[0][1] == LONG and rows[1][1] == "含安裝"
-    # 品項列之後緊接備註列
-    t = _table(h)
-    assert t.index("品項1") < t.index(LONG) < t.index("品項2") < t.index("含安裝")
+    rows = _tbody_rows(h)
+    rem = _remarks(rows)
+    assert [r.spans for r in rem] == [[1, 6], [1, 6]]           # 長備註與短備註「含安裝」一律下移；第一格是 # 欄的空格
+    assert all(r.cells[0].text == "" for r in rem)
+    assert _rbox_lines(h) == [[LONG], ["含安裝"]]
+    # 品項列之後緊接備註列：品項0（無備註）→ 品項1 → 備註 → 品項2 → 備註
+    pos = {n: next(i for i, r in enumerate(rows) if n in r.text and "remark-row" not in r.cls) for n in ("品項0", "品項1", "品項2")}
+    assert "remark-row" in rows[pos["品項1"] + 1].cls and LONG in rows[pos["品項1"] + 1].text
+    assert "remark-row" in rows[pos["品項2"] + 1].cls and "含安裝" in rows[pos["品項2"] + 1].text
+    assert "remark-row" not in rows[pos["品項0"] + 1].cls
 
 
 def test_internal_version_spans_to_cost_columns():
     h = _html(_q(), internal=True)
-    assert re.findall(r'<tr class="remark-row[^"]*"><td></td><td colspan="(\d+)"', _table(h)) == ["8", "8"]
-    assert 'colspan="8"' in _table(h)                           # 分組標題列也是 8（共 9 欄）
-    assert h.count("<th") - h.count("<thead") == 9
+    rows = _tbody_rows(h)
+    assert [r.spans[1] for r in _remarks(rows)] == [8, 8]
+    assert [r.spans for r in rows if "VMS" in r.text and "remark-row" not in r.cls] == [[1, 8]]   # 分組標題列也是 8（共 9 欄）
+    assert len(_ths(h)) == 9
 
 
 def test_header_colspan_matches_column_count():
     ext = _html(_q())
-    assert '<td colspan="6" style="font-weight:700' in ext
-    assert ext.count("<th") - ext.count("<thead") == 7
+    group = [r for r in _tbody_rows(ext) if r.spans == [1, 6] and "remark-row" not in r.cls]
+    assert len(group) == 1 and "VMS" in group[0].text
+    assert "font-weight:700" in group[0].cells[1].attrs["style"]
+    assert len(_ths(ext)) == 7
 
 
 def test_newlines_kept_and_html_escaped():
@@ -64,10 +172,13 @@ def test_remark_rows_do_not_split_across_pages_and_zebra_follows_item():
     h = _html(_q())
     assert "tr.has-below{page-break-after:avoid;break-after:avoid}" in h
     assert "tr.remark-row{page-break-before:avoid;break-before:avoid}" in h
-    t = _table(h)
+    rows = _tbody_rows(h)
     # 列序：分組(1) 品項0(2,偶數→z) 品項1(3) 備註 品項2(4,偶數→z) 備註 ⇒ 備註列與上方品項同色
-    assert '<tr class="z">' in t and '<tr class="has-below">' in t and '<tr class="z has-below">' in t
-    assert '<tr class="remark-row z">' in t and '<tr class="remark-row">' in t
+    kinds = {tuple(sorted(r.cls)) for r in rows}
+    assert {("z",), ("has-below",), ("has-below", "z"), ("remark-row",), ("remark-row", "z")} <= kinds
+    for i, r in enumerate(rows):
+        if "remark-row" in r.cls:
+            assert ("z" in r.cls) == ("z" in rows[i - 1].cls) and "has-below" in rows[i - 1].cls, (i, r.cls, rows[i - 1].cls)
 
 
 def test_no_remarks_means_no_new_markup():
@@ -84,11 +195,13 @@ def test_estimate_doc_type_shares_the_same_table():
         q["docType"] = "estimate"
         h = _html(q, internal=internal)
         assert "<title>MQ-T-1 估價單</title>" in h                          # 確實走的是估價單用語
-        t = _table(h)
-        assert re.findall(r'<tr class="remark-row[^"]*"><td></td><td colspan="(\d+)"', t) == [span, span]
-        assert LONG in t and "含安裝" in t
-        assert h.count("<th") - h.count("<thead") == ncols                  # 沒有備註欄
-        assert ">備註</th>" not in h
+        rows = _tbody_rows(h)
+        assert [r.spans[1] for r in _remarks(rows)] == [int(span), int(span)]
+        body = " ".join(r.text for r in rows)
+        assert LONG in body and "含安裝" in body
+        heads = _ths(h)
+        assert len(heads) == ncols                                          # 沒有備註欄
+        assert "備註" not in [th.text.strip() for th in heads]
 
 
 # ───────────── 欄寬依內容自動分配（品名／廠牌型號，數字欄縮到剛好放得下最大金額）─────────────
@@ -116,8 +229,11 @@ def test_long_part_number_widens_brand_column_and_numeric_columns_give_way():
     assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 20 and w[2] > 110
     assert w[5] <= 122 and w[6] <= 122 and w[1] >= 100        # 數字欄不比預設寬，品名欄保有最小寬度
     h = _html(q)
-    assert '<table class="items">' in h and len(re.findall(r"<col[ >]", h)) == 7
-    assert len(re.findall(r'<col style="width:[\d.]+%">', h)) == 7             # 每欄百分比（頁面縮放時等比）
+    root = _parse(h)
+    assert any("items" in t.cls for t in root.all("table"))
+    cols = root.all("col")
+    assert len(cols) == 7
+    assert all(c.attrs.get("style", "").startswith("width:") and c.attrs["style"].endswith("%") for c in cols)    # 每欄百分比（頁面縮放時等比）
     assert "table.items{table-layout:fixed}" in h
 
 
@@ -139,7 +255,7 @@ def test_big_amounts_get_their_width_and_never_below_the_need():
 def test_internal_version_has_nine_columns_and_tighter_padding():
     q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")
     h = _html(q, internal=True)
-    assert len(re.findall(r"<col[ >]", h)) == 9 and "padding-left:5px;padding-right:5px" in h
+    assert len(_parse(h).all("col")) == 9 and "padding-left:5px;padding-right:5px" in h
 
 
 def test_widths_do_not_depend_on_header_text():
@@ -153,10 +269,10 @@ def test_cost_cell_tint_wins_over_every_zebra_rule():
     有備註、沒備註都一樣；客戶版沒有成本欄，不加這條。"""
     for q in (_q(), _q(("", "", ""))):
         h = _html(q, internal=True)
-        tint = h.rindex("tbody tr td.cost-cell{background:#FFF8F0}")
-        zebra = [h.rindex(r) for r in ("tbody tr:nth-child(even) td{", "tbody tr.z td{") if r in h]
-        assert zebra and all(tint > z for z in zebra), (tint, zebra)
-        assert h.count("tbody tr td.cost-cell{background:#FFF8F0}") == 1
+        rules = _css_rules(h)
+        tint = _rule_pos(rules, "tbody tr td.cost-cell", "background:#FFF8F0")
+        zebra = _rule_pos(rules, "tbody tr:nth-child(even) td") + _rule_pos(rules, "tbody tr.z td")
+        assert len(tint) == 1 and zebra and all(tint[0] > z for z in zebra), (tint, zebra)
     assert "tbody tr td.cost-cell" not in _html(_q())
 
 
@@ -173,7 +289,7 @@ def test_colgroup_uses_percentages_that_sum_to_100():
     """PDF 長單會被 zoom 縮放，版面寬度 ≠ 695px：欄寬用百分比，各欄等比，不會有欄被多撐出空白。"""
     for cols in ([28, 122, 184, 48, 71, 121, 121], [28, 120, 174, 35, 36, 75, 52, 93, 82]):
         cg = pdf_gen._quote_colgroup(cols)
-        pcts = [float(x) for x in re.findall(r"width:([\d.]+)%", cg)]
+        pcts = [float(c.attrs["style"][len("width:"):-1]) for c in _parse(cg).all("col")]
         assert len(pcts) == len(cols) and abs(sum(pcts) - 100) < 0.002, pcts
 
 
@@ -194,24 +310,25 @@ def test_internal_header_cost_cells_stay_dark():
     """PM：內部版表頭「單位成本／毛利率」被 .cost-cell 淡橘底蓋成白字配淡底看不見；表頭維持深底，淡橘底只給 tbody 的 td。"""
     for q in (_q(), _q(("", "", ""))):
         h = _html(q, internal=True)
-        assert "thead th.cost-cell{background:#0A0A0A}" in h
-        assert h.index(".cost-cell{background:#FFF8F0}") < h.index("thead th.cost-cell{background:#0A0A0A}")   # 同權重以上、且在後
-        head = h[h.index("<thead>"):h.index("</thead>")]
-        assert head.count('<th class="r cost-cell"') == 2
+        rules = _css_rules(h)
+        dark = _rule_pos(rules, "thead th.cost-cell", "background:#0A0A0A")
+        tint = _rule_pos(rules, ".cost-cell", "background:#FFF8F0")
+        assert dark and tint and tint[0] < dark[0]                                  # 表頭深底規則在淡橘底之後（同權重以上）
+        assert len([th for th in _ths(h) if {"r", "cost-cell"} <= th.cls]) == 2
     assert "thead th.cost-cell" not in _html(_q())                         # 客戶版沒有成本欄，輸出不動
 
 
 def test_remark_box_uses_only_colors_already_in_the_quote_stylesheet():
     """使用者：備註的風格要跟報價單一致。.rbox 的每個色票都必須在報價單其他地方（條款方框、小標、徽章…）出現過。"""
     h = _html(_q())
-    css = h[h.index("<style>"):h.index("</style>")]
-    rbox = [ln for ln in css.split("\n") if ln.strip().startswith(".rbox")]
-    other = "\n".join(ln for ln in css.split("\n") if not ln.strip().startswith(".rbox"))
-    other += h[h.index("</style>"):]                                  # 內嵌樣式（徽章等）
+    rules = _css_rules(h)
+    rbox = [b for a, b in rules if a.startswith(".rbox")]
+    other = "\n".join(b for a, b in rules if not a.startswith(".rbox"))
+    other += "\n".join(n.attrs.get("style", "") for n in _parse(h).walk())          # 內嵌樣式（徽章等）
     colors = set(re.findall(r"#[0-9A-Fa-f]{3,6}\b", "\n".join(rbox)))
     assert colors, rbox
     for c in colors:
-        assert c.lower() in other.lower() or c.lower() in h[h.index("</style>"):].lower(), (c, "報價單其他地方沒用過的顏色")
+        assert c.lower() in other.lower(), (c, "報價單其他地方沒用過的顏色")
     assert "border-radius:4px" in "".join(rbox)
 
 
@@ -237,22 +354,23 @@ def _with_layout(layout, notes=MULTI, extra=None):
 
 
 def _rbox(h):
-    return re.findall(r'<div class="rbox"><b>備註</b>(.*?)</div>', h)
+    return _rbox_lines(h)
 
 
 def test_wrap_is_the_default_and_old_documents_render_byte_identically():
     no_key = _html(_with_layout(...))
     assert _html(_with_layout("wrap")) == no_key                       # 明寫 wrap ＝ 沒有這個鍵
-    assert _rbox(no_key) == ["智慧人形偵測 4 路<br>每一路攝影機一套 AI 授權<br><br>  含 ONVIF 錄影授權 x16"]      # 原樣保留換行（外圍空白由 strip 去掉）
+    assert _rbox(no_key) == [["智慧人形偵測 4 路", "每一路攝影機一套 AI 授權", "", "  含 ONVIF 錄影授權 x16"]]      # 原樣保留換行（外圍空白由 strip 去掉）
     assert "notesLayout" not in no_key
 
 
 def test_inline_flattens_newlines_into_one_run_joined_by_fullwidth_space():
     h = _html(_with_layout("inline"))
-    assert _rbox(h) == ["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]     # 空行丟掉、每行去頭尾空白
-    assert "<br>" not in _rbox(h)[0]
-    assert "white-space:nowrap" not in h.split(".rbox{")[1].split("}")[0]                 # 沒有強制不折行：排滿自然折行
-    assert h.count('<tr class="remark-row') == 1 and 'colspan="6"' in _table(h)
+    assert _rbox(h) == [["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]]     # 空行丟掉、每行去頭尾空白；一整段、沒有換行
+    bodies = [b for a, b in _css_rules(h) if a == ".rbox"]
+    assert bodies and all("white-space:nowrap" not in b for b in bodies)                  # 沒有強制不折行：排滿自然折行
+    rem = _remarks(_tbody_rows(h))
+    assert len(rem) == 1 and rem[0].spans[1] == 6
 
 
 def test_inline_escapes_html_and_is_per_item():
@@ -261,8 +379,8 @@ def test_inline_escapes_html_and_is_per_item():
                                                           "margin": 0, "notes": "第一行\n第二行"})
     h = _html(q)
     boxes = _rbox(h)
-    assert boxes[0] == "&lt;b&gt;x&lt;/b&gt;　&amp;y"                                      # 第一項：一行到底
-    assert boxes[1] == "第一行<br>第二行"                                                  # 第二項沒選 ⇒ 預設換行：各品項各自選
+    assert boxes[0] == ["<b>x</b>　&y"]                                                   # 第一項：一行到底；標籤與 & 都是純文字（已逸出）
+    assert boxes[1] == ["第一行", "第二行"]                                                  # 第二項沒選 ⇒ 預設換行：各品項各自選
 
 
 def test_unknown_layout_values_fall_back_to_wrap_when_rendering():
@@ -281,7 +399,7 @@ def test_estimate_shares_the_layout_option():
     for internal in (False, True):
         q = _with_layout("inline")
         q["docType"] = "estimate"
-        assert _rbox(_html(q, internal=internal)) == ["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]
+        assert _rbox(_html(q, internal=internal)) == [["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]]
 
 
 def test_server_cleans_unknown_layout_values_and_leaves_old_items_alone():

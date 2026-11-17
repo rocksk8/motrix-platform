@@ -238,6 +238,8 @@ def test_note_layout_toggle_saves_reloads_and_renders_in_preview(live_server, ma
     assert page.locator('[data-testid="qf-note-layout-inline"]').first.get_attribute("aria-pressed") == "false"
     # 只動第一項：切成「連成一行」
     page.locator('[data-testid="qf-note-layout-inline"]').first.click()
+    page.wait_for_function("() => { const b = document.querySelectorAll('[data-testid=\"qf-note-layout-inline\"]'); "
+                           "return b.length === 2 && b[0].getAttribute('aria-pressed') === 'true' && b[1].getAttribute('aria-pressed') === 'false' }", timeout=5000)
     assert page.locator('[data-testid="qf-note-layout-inline"]').first.get_attribute("aria-pressed") == "true"
     assert page.locator('[data-testid="qf-note-layout-inline"]').nth(1).get_attribute("aria-pressed") == "false"
     page.evaluate(f"() => {DATA_JS}.saveDraft()")
