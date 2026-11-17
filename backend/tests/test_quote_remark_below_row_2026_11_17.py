@@ -114,10 +114,10 @@ def test_long_part_number_widens_brand_column_and_numeric_columns_give_way():
     w = _widths(q["items"])                                    # # 品名 廠牌 數量 單位 單價 金額
     assert len(w) == 7 and abs(sum(w) - 695) <= 1, w
     assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 20 and w[2] > 110
-    assert w[5] <= 120 and w[6] <= 120 and w[1] >= 100        # 數字欄不比預設寬，品名欄保有最小寬度
+    assert w[5] <= 122 and w[6] <= 122 and w[1] >= 100        # 數字欄不比預設寬，品名欄保有最小寬度
     h = _html(q)
     assert '<table class="items">' in h and len(re.findall(r"<col[ >]", h)) == 7
-    assert "<colgroup><col style=\"width:" in h and "<col><col style" in h      # 品名（第 2 欄）不給寬度：吃掉所有剩餘寬度
+    assert len(re.findall(r'<col style="width:[\d.]+%">', h)) == 7             # 每欄百分比（頁面縮放時等比）
     assert "table.items{table-layout:fixed}" in h
 
 
@@ -164,9 +164,36 @@ def test_estimator_matches_measured_chromium_widths():
         assert abs(got - real) / real <= 0.04, (text, got, real)
 
 
-def test_name_column_has_no_width_so_it_takes_all_the_slack():
-    cg = pdf_gen._quote_colgroup([28, 300, 180, 48, 52, 100, 100])
-    assert cg.count("<col>") == 1 and cg.startswith('<colgroup><col style="width:28px"><col><col style="width:180px">')
+def test_colgroup_uses_percentages_that_sum_to_100():
+    """PDF 長單會被 zoom 縮放，版面寬度 ≠ 695px：欄寬用百分比，各欄等比，不會有欄被多撐出空白。"""
+    for cols in ([28, 122, 184, 48, 71, 121, 121], [28, 120, 174, 35, 36, 75, 52, 93, 82]):
+        cg = pdf_gen._quote_colgroup(cols)
+        pcts = [float(x) for x in re.findall(r"width:([\d.]+)%", cg)]
+        assert len(pcts) == len(cols) and abs(sum(pcts) - 100) < 0.002, pcts
+
+
+def test_number_columns_keep_default_widths_unless_space_is_short():
+    """使用者：內容夠就不要壓縮後面的數字欄。短品名＋最長料號：數量／單位／單價／金額維持預設 48／70／120／120。"""
+    w = _widths(_rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")["items"])
+    assert [w[3], w[4], w[5], w[6]] == [48, 71, 121, 121] or all(abs(a - b) <= 2 for a, b in zip(w[3:], (48, 70, 120, 120))), w
+    assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 20          # 料號一行放得下
+    assert w[1] < 140                                                       # 品名不會被塞成超寬
+    # 長品名＋長料號：不夠用才從數字欄借，借到不比最大金額／表頭窄為止
+    L = "i5 Mini2 主機（詳細規格於附件檔案），含 16 路 ONVIF 錄影授權、雙網卡、64GB 記憶體與原廠三年保固"
+    w2 = _widths(_rows(brand="SR-S-VMS-Mini2-516-AID04", name=L, price=86100)["items"])
+    floor = int(pdf_gen._est_px("NT$ 86,100", num=True) + 20)
+    assert w2[5] < 120 and w2[5] >= max(floor, 100) and w2[6] >= floor and w2[1] > w[1], (w2, floor)
+
+
+def test_internal_header_cost_cells_stay_dark():
+    """PM：內部版表頭「單位成本／毛利率」被 .cost-cell 淡橘底蓋成白字配淡底看不見；表頭維持深底，淡橘底只給 tbody 的 td。"""
+    for q in (_q(), _q(("", "", ""))):
+        h = _html(q, internal=True)
+        assert "thead th.cost-cell{background:#0A0A0A}" in h
+        assert h.index(".cost-cell{background:#FFF8F0}") < h.index("thead th.cost-cell{background:#0A0A0A}")   # 同權重以上、且在後
+        head = h[h.index("<thead>"):h.index("</thead>")]
+        assert head.count('<th class="r cost-cell"') == 2
+    assert "thead th.cost-cell" not in _html(_q())                         # 客戶版沒有成本欄，輸出不動
 
 
 def test_remark_box_uses_only_colors_already_in_the_quote_stylesheet():
@@ -187,3 +214,5 @@ def test_adjusted_layout_neutralises_header_width_hints():
     """欄寬調整時 <th style=width> 的預設提示作廢（否則品名欄 th 的 190px 會把剩餘寬度按比例攤給所有欄）。"""
     h = _html(_rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機"))
     assert "table.items thead th{width:auto!important}" in h
+
+

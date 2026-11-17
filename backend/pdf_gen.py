@@ -311,14 +311,15 @@ def _est_px(s: str, size: float = 12.0, num: bool = False) -> float:
 
 
 def _quote_col_widths(items: list, internal: bool, total: float = 695.0):
-    """報價單品項表的欄寬（px，依欄序）；沒有需要調整 ⇒ None（表頭維持原本的寬度提示，輸出逐位元不變）。
+    """報價單品項表的欄寬（px，依欄序，總和＝total）；沒有需要調整 ⇒ None（表頭維持原本的寬度提示，輸出逐位元不變）。
 
     需要調整＝廠牌／型號有比預設 110px 放得下更長的料號、品名最長一行放不進預設 190px，或金額比預設欄寬放得下更大。
-    此時改用 table-layout:fixed ＋ <colgroup>：
-    - 廠牌／型號＝剛好放得下最長料號（單一詞，空白分隔；上限留給品名欄最小寬度，再長就在「-」處換行）；
-    - 數字欄＝剛好放得下該單最大金額（下限＝表頭放得下）；#／數量／單位依內容；
-    - 品名欄**不給寬度**（見 _quote_colgroup）：吃掉所有剩餘寬度——頁面被縮放（長單 zoom<1）時，版面寬度比 695px 大，
-      多出來的全都給品名，不會被各欄等比放大而浪費。回傳值裡的品名寬度＝以 `total`(A4 可列印寬 695px) 算出的預估，只供參考／測試。
+    此時改用 table-layout:fixed ＋ <colgroup>（百分比，頁面被縮放時各欄等比，見 _quote_colgroup），規則（使用者 2026-11-17）：
+    1. 數字欄（數量／單位／單價／金額，內部版另有成本／毛利率）維持原本寬度（48／70／120／120／100／64），不主動縮；金額更大才加寬；
+    2. 品名、廠牌／型號依內容取「放得下就好」的寬度（品名上限 360px、料號用實測字寬估算只留 2px 邊距）；
+    3. 需要的寬度加起來超過可用寬度時，才從數字欄借（依各欄可借的量比例，借到「剛好放得下最大金額、不比表頭窄」為止）；
+       還不夠才縮品名（到最小寬度），最後才縮料號欄（在「-」處換行）；
+    4. 有剩餘空白時，各欄依目前寬度比例平均分，不是全塞給品名欄。
     ⚠️ 不依賴表頭文字（廠牌／型號欄名可由使用者自訂），只看品項資料。欄序：# 品名 廠牌 數量 單位 [成本 毛利率] 單價 金額。"""
     its = [it for it in items if it.get('type') != 'header']
     PAD = 12 if internal else 20                # 儲存格左右內距（外部版 9+9，內部版縮成 5+5）＋ 2px 邊距
@@ -332,29 +333,63 @@ def _quote_col_widths(items: list, internal: bool, total: float = 695.0):
     def need(vals, lo, num=False):
         return max([lo] + [int(_est_px(str(v), num=num) + PAD + 0.999) for v in vals])
     b_need = max([0] + [int(_est_px(t) + PAD + 0.999) for it in its for t in str(it.get('brand') or '').split()])
-    # 下限＝該欄表頭（11px，字距 .04em）放得下：單價（未稅額）80、金額（未稅）69、單位成本 46、毛利率 34、數量／單位 23
-    price = need((money(it.get('unitPrice')) for it in its), 80 + PAD, True)
-    amt = need((money(it.get('amount')) for it in its), 69 + PAD, True)
-    cost = need((money(it.get('cost')) for it in its), 46 + PAD, True) if internal else 0
+    # 數字欄的「剛好」＝內容放得下且不比表頭窄（表頭 11px、字距 .04em：單價（未稅額）80、金額（未稅）69、單位成本 46、毛利率 34、數量／單位 23）
+    price_fit = need((money(it.get('unitPrice')) for it in its), 80 + PAD, True)
+    amt_fit = need((money(it.get('amount')) for it in its), 69 + PAD, True)
+    cost_fit = need((money(it.get('cost')) for it in its), 46 + PAD, True) if internal else 0
     # 品名：最長的一行（換行符分行）放得下需要的寬度，上限 360px（再長就讓它換行）
     n_need = min(360, max([0] + [int(_est_px(ln) + PAD + 0.999) for it in its
                                  for ln in str(it.get('description') or '').split('\n')]))
-    if not (b_need > 110 or n_need > 190 or price > 120 or amt > 120 or cost > 100):
+    if not (b_need > 110 or n_need > 190 or price_fit > 120 or amt_fit > 120 or cost_fit > 100):
         return None                             # 短料號、品名放得下、金額不大 ⇒ 完全不動（舊單版面不變）
-    hashw = need((str(len(its) + 1),), 28)
-    qty = need((str(it.get('qty', '')) for it in its), 23 + PAD)
-    unit = need((str(it.get('unit') or '') for it in its), 23 + PAD)
-    margin = 34 + PAD + 6 if internal else 0    # 「30.0%」放得下
-    rest = int(total - (hashw + qty + unit + cost + margin + price + amt))   # 品名＋廠牌／型號 共用的寬度
-    name_min = 170 if internal else 140
-    brand = max(68 + PAD, min(max(b_need, 68 + PAD), rest - name_min))      # 下限＝預設表頭「廠牌 / 型號」放得下
-    name = rest - brand
-    return [hashw, name, brand, qty, unit] + ([cost, margin] if internal else []) + [price, amt]
+    hash_fit = need((str(len(its) + 1),), 28)
+    qty_fit = need((str(it.get('qty', '')) for it in its), 23 + PAD)
+    unit_fit = need((str(it.get('unit') or '') for it in its), 23 + PAD)
+    margin_fit = 34 + PAD + 6 if internal else 0                  # 「30.0%」放得下
+    # 數字欄：預設寬度（但不小於內容需要），可借到 fit
+    nums = [('hash', hash_fit, hash_fit), ('qty', max(48, qty_fit), qty_fit), ('unit', max(70, unit_fit), unit_fit)]
+    if internal:
+        nums += [('cost', max(100, cost_fit), cost_fit), ('margin', max(64, margin_fit), margin_fit)]
+    nums += [('price', max(120, price_fit), price_fit), ('amt', max(120, amt_fit), amt_fit)]
+    cur = {k: float(c) for k, c, _ in nums}
+    fit = {k: float(f) for k, _, f in nums}
+    name_min = 170.0 if internal else 140.0
+    brand_min = float(68 + PAD)                                   # 預設表頭「廠牌 / 型號」放得下
+    name = float(min(360, max(120, n_need)))
+    brand = float(max(brand_min, b_need))
+    want = sum(cur.values()) + name + brand
+    if want > total:                                              # 不夠用：先借數字欄，再縮品名，最後縮料號
+        deficit = want - total
+        slack = {k: cur[k] - fit[k] for k in cur}
+        s = sum(slack.values())
+        if s > 0:
+            take = min(deficit, s)
+            for k in cur:
+                cur[k] -= take * slack[k] / s
+            deficit -= take
+        if deficit > 0:
+            t = min(deficit, max(0.0, name - name_min))
+            name -= t
+            deficit -= t
+        if deficit > 0:
+            brand = max(brand_min, brand - deficit)
+    else:                                                         # 有剩餘：各欄依目前寬度比例分
+        f = total / want
+        cur = {k: v * f for k, v in cur.items()}
+        name *= f
+        brand *= f
+    cols = [int(round(cur['hash'])), int(round(name)), int(round(brand)), int(round(cur['qty'])), int(round(cur['unit']))]
+    cols += ([int(round(cur['cost'])), int(round(cur['margin']))] if internal else [])
+    cols += [int(round(cur['price'])), int(round(cur['amt']))]
+    cols[1] += int(round(total)) - sum(cols)                      # 湊整：誤差併入品名
+    return cols
 
 
-def _quote_colgroup(cols: list) -> str:
-    """<colgroup>：除了品名欄（第 2 欄）以外都給寬度；品名欄不給，由 table-layout:fixed 把剩餘寬度全部分給它。"""
-    return '<colgroup>' + ''.join('<col>' if i == 1 else f'<col style="width:{w}px">' for i, w in enumerate(cols)) + '</colgroup>\n'
+def _quote_colgroup(cols: list, total: float = 695.0) -> str:
+    """<colgroup>：各欄寬度用百分比（=px/total），頁面被縮放（長單 zoom<1，版面寬度大於 695px）時各欄等比，不會有欄被多撐。"""
+    pct = [round(w / total * 100, 3) for w in cols]
+    pct[1] = round(100 - sum(pct) + pct[1], 3)                    # 總和精確＝100%
+    return '<colgroup>' + ''.join(f'<col style="width:{p}%">' for p in pct) + '</colgroup>\n'
 
 
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
@@ -535,7 +570,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
         '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}.totals{page-break-inside:avoid}.totals-group{page-break-inside:avoid}.terms{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
         '  .cost-cell{background:#FFF8F0}\n'
-        '  .cost-banner{background:#FFF3E0;border:1px solid #F59E0B;border-radius:4px;padding:6px 12px;font-size:10px;color:#92400E;margin-bottom:10px;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        + ('  thead th.cost-cell{background:#0A0A0A}\n' if internal else '')   # 表頭成本兩格維持深底；淡橘底只給 tbody 的 td（否則白字配淡底看不見）
+        + '  .cost-banner{background:#FFF3E0;border:1px solid #F59E0B;border-radius:4px;padding:6px 12px;font-size:10px;color:#92400E;margin-bottom:10px;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
         '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
         '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
