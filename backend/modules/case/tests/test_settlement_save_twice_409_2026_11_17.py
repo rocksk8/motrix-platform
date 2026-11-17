@@ -6,9 +6,19 @@ import threading
 import time
 
 import db
+import helpers.audit as _audit
+import pytest
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln  # noqa: F401
 from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import URL, case, page_payload  # noqa: F401
 from modules.case.tests._t40_won import quote_is_won  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _reset_fail_last():
+    """fail.PUT 稽核有 (用戶,方法,路由,狀態碼) 的 repeat 合併表 `_FAIL_LAST`（行程內）：前一個測試留下的鍵會讓本檔第一次失敗併進別的資料庫的列 ⇒ 前後都清（同行程跑 settle 子集時才會現形）。"""
+    _audit._FAIL_LAST.clear()
+    yield
+    _audit._FAIL_LAST.clear()
 
 
 def _db_updated_at():
@@ -87,3 +97,18 @@ def test_finalize_right_after_draft_save_is_not_a_conflict(case):
     assert r1.status_code == 200, r1.text
     r2 = _put(c, h, page_payload(c, h), r1.json()["updated_at"])
     assert r2.status_code == 200, "草稿存完立刻完結被擋：%s" % r2.text[:300]
+
+
+def test_stale_version_audit_msg_keeps_db_value_even_with_overlong_client_value(case):
+    """稽核 msg 上限 120 字：資料庫現值放前面、頁面帶的值截斷 ⇒ 超長輸入不會把現值擠掉。"""
+    c, h = case
+    cur = _db_updated_at()
+    r = _put(c, h, {"status": "draft", "items": [], "offsets": []}, "X" * 500)
+    assert r.status_code == 409 and r.headers.get("X-Fail-Reason") == "stale_version"
+    cn = db.get_db()
+    try:
+        row = cn.execute("SELECT detail FROM audit_log WHERE action='fail.PUT' ORDER BY id DESC LIMIT 1").fetchone()
+    finally:
+        cn.close()
+    msg = json.loads(row["detail"] or "{}").get("msg", "")
+    assert cur in msg and msg.index(cur) < msg.index("X") and len(msg) <= 120, msg

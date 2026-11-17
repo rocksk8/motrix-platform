@@ -89,7 +89,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             raise HTTPException(409, "這張報價單尚未成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"), headers=_fail("not_won"))
         if body.expectedUpdatedAt is not None and (row["updated_at"] or "") != body.expectedUpdatedAt:      # 38：樂觀鎖——兩人（或兩個分頁）同時編輯，後存的不再悄悄蓋掉前存的
             conn.close()
-            raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存", headers=_fail("stale_version", "頁面帶 %s／資料庫現值 %s" % (body.expectedUpdatedAt, row["updated_at"] or "")))      # 版本戳記是時間字串（非金額）：看是頁面帶舊值、資料庫被改過、還是格式不同
+            raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存", headers=_fail("stale_version", "資料庫現值 %s／頁面帶 %s" % (row["updated_at"] or "", str(body.expectedUpdatedAt)[:40])))      # 版本戳記是時間字串（非金額）：看是頁面帶舊值、資料庫被改過、還是格式不同
         data = json.loads(row["data_json"] or "{}")
         existing_settlement = data.get("settlement") or {}
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":

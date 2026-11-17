@@ -391,7 +391,7 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
             return "skip"
         reason = reason if reason in _FAIL_REASON_LABELS else _FAIL_STATUS_REASON.get(int(status), "server_error")
         msg = (msg or "")[:120]          # 簡短訊息（端點只放欄位名稱之類的分類文字，不放金額／個資），上限 120 字
-        mono =time.monotonic() if now is None else now
+        mono = time.monotonic() if now is None else now
         key = (user_id, method, route, int(status))
         seg = (route or "").split("/")
         first = seg[2] if len(seg) > 2 else ""
