@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 1027,
-  "endpoints_api": 1023,
-  "write_total": 553,
-  "write_api": 553,
+  "endpoints_total": 1028,
+  "endpoints_api": 1024,
+  "write_total": 554,
+  "write_api": 554,
   "get_api": 470,
-  "distinct_paths_api": 871,
+  "distinct_paths_api": 872,
   "write_with_body_api": 413,
-  "write_with_path_param_api": 373
+  "write_with_path_param_api": 374
  },
  "select_star": {
   "modules": 290,
@@ -4247,6 +4247,11 @@
    "w": true,
    "pp": 1,
    "body": true
+  },
+  "POST /api/quotations/{quote_no}/spec-files/discard-staged": {
+   "w": true,
+   "pp": 1,
+   "body": false
   },
   "POST /api/quotations/{quote_no}/stages": {
    "w": true,

@@ -36,6 +36,7 @@ def _seed_with_file(conn):
 CASES = [
     {"key": "POST /api/quotations/{quote_no}/spec-files", "url": "/api/quotations/%s/spec-files" % _NO, "setup": _seed,
      "files": [("files", ("金標.pdf", _blank_pdf(), "application/pdf"))]},
+    {"key": "POST /api/quotations/{quote_no}/spec-files/discard-staged", "url": "/api/quotations/%s/spec-files/discard-staged" % _NO, "setup": _seed},
     {"key": "DELETE /api/quotations/{quote_no}/spec-files/{file_id}", "url": "/api/quotations/%s/spec-files/wgspec1" % _NO,
      "setup": _seed_with_file},
 ]

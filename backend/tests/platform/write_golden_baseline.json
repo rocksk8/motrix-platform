@@ -57,7 +57,8 @@
  "DELETE /api/quotations/{quote_no}/spec-files/{file_id}": {
   "k": [
    "mergeFiles",
-   "specFiles"
+   "specFiles",
+   "staged"
   ],
   "s": 200
  },
@@ -493,7 +494,23 @@
    "specFiles[].size",
    "specFiles[].status",
    "specFiles[].uploadedAt",
-   "specFiles[].uploadedBy"
+   "specFiles[].uploadedBy",
+   "staged"
+  ],
+  "s": 200
+ },
+ "POST /api/quotations/{quote_no}/spec-files/discard-staged": {
+  "k": [
+   "mergeFiles",
+   "specFiles",
+   "specFiles[].id",
+   "specFiles[].name",
+   "specFiles[].pages",
+   "specFiles[].size",
+   "specFiles[].status",
+   "specFiles[].uploadedAt",
+   "specFiles[].uploadedBy",
+   "staged"
   ],
   "s": 200
  },
