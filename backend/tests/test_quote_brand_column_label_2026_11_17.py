@@ -6,7 +6,7 @@
 2. PDF 表頭（品名 / 規格說明、廠牌 / 型號）顯示自訂欄名且 HTML 跳脫；沒自訂（含舊單）輸出與預設逐位元相同。
 3. 送簽（建單即送審、草稿轉待審核、解鎖編輯重簽）時 approval.reasons 註記「欄名已由「廠牌 / 型號」變更為「○○」」（兩欄各一行）；沒改＝原有行為不動。
 4. 編輯紀錄（editHistory）看得到欄名變更。
-5. 估價單（共用範本）暫不跟進：欄名一律不收、PDF 維持預設（要跟進只改 helpers.quote_brand_label.APPLIES_TO）。
+5. 估價單（共用範本與表單；使用者裁示一起改）比照報價單：可存欄名、PDF 顯示、送簽註記；沒自訂的估價單輸出不變。
 """
 import json
 
@@ -36,6 +36,13 @@ def test_normalize_trims_collapses_strips_control_and_caps_length():
     assert BL.normalize("brand", "料\x00號\u200b") == "料號"
     assert BL.normalize("item", "品  項\n編號") == "品 項 編號"
     assert BL.normalize("item", "甲" * 50) == "甲" * BL.MAX_LEN
+
+
+def test_invisible_characters_are_visible_escapes_in_source_and_stripped():
+    import inspect
+    src = inspect.getsource(BL)
+    assert not any(ord(c) in (0x200b, 0x200f, 0x2028, 0x2029, 0xfeff) for c in src), "原始碼裡不放看不見的字元，用 \\u 轉義"
+    assert BL.normalize("brand", "料" + chr(0x200b) + "號" + chr(0xfeff) + chr(0x2028)) == "料號"
 
 
 def test_columns_defaults_and_presets():
@@ -71,11 +78,16 @@ def test_sanitize_in_place_keeps_only_valid_columns():
     assert q == {"docType": "quote"}, "沒這個鍵＝不動（舊單）"
 
 
-def test_estimate_is_not_followed_yet():
-    q = {"docType": "estimate", "columnLabels": {"brand": "料號", "item": "品項"}}
-    assert BL.labels_of(q) == {"item": ITEM, "brand": DEFAULT} and BL.change_reasons(q) == []
+def test_estimate_follows_quote():
+    q = {"docType": "estimate", "columnLabels": {"brand": " 料號 ", "item": "品項"}}
     BL.sanitize(q)
-    assert "columnLabels" not in q
+    assert q["columnLabels"] == {"brand": "料號", "item": "品項"}
+    assert BL.labels_of(q) == {"item": "品項", "brand": "料號"}
+    assert BL.change_reasons(q) == [NOTE_I % "品項", NOTE_B % "料號"]
+    assert BL.change_reasons({"docType": "estimate"}) == [] and BL.labels_of({"docType": "estimate"}) == {"item": ITEM, "brand": DEFAULT}
+    q = {"docType": "estimate", "columnLabels": {"brand": DEFAULT, "item": ""}}
+    BL.sanitize(q)
+    assert "columnLabels" not in q, "估價單同樣：與預設相同／空白＝沒改"
 
 
 # ── PDF ─────────────────────────────────────────────────────────────────────
@@ -109,9 +121,13 @@ def test_pdf_without_labels_is_byte_identical_to_default():
         assert _html({"columnLabels": cl}) == base, cl
 
 
-def test_pdf_estimate_keeps_defaults():
+def test_pdf_estimate_shows_custom_labels_and_unchanged_without():
     html = _html({"docType": "estimate", "columnLabels": {"brand": "料號", "item": "品項"}})
-    assert TH_B % DEFAULT in html and TH_I % ITEM in html and "料號</th>" not in html
+    assert TH_B % "料號" in html and TH_I % "品項" in html and "估價" in html
+    base = _html({"docType": "estimate"})
+    assert TH_B % DEFAULT in base and TH_I % ITEM in base
+    for cl in ({}, {"brand": "", "item": ""}, {"brand": DEFAULT, "item": ITEM}, "壞掉", None):
+        assert _html({"docType": "estimate", "columnLabels": cl}) == base, cl
 
 
 # ── API：存讀、送簽註記、編輯紀錄 ─────────────────────────────────────────────
@@ -186,9 +202,24 @@ class TestApi:
         stored = _row(no)[0]["columnLabels"]
         assert set(stored) == {"brand"} and len(stored["brand"]) <= BL.MAX_LEN
 
-    def test_estimate_labels_not_accepted(self, client, hdr):
+    def test_estimate_labels_saved_noted_on_submit_and_tracked_in_history(self, client, hdr):
         no = _create(client, hdr, _data(docType="estimate", columnLabels={"brand": "料號", "item": "品項"}))
-        assert "columnLabels" not in _row(no)[0]
+        assert no.startswith("ME-"), no
+        assert _row(no)[0]["columnLabels"] == {"brand": "料號", "item": "品項"}
+        r = client.put(f"/api/quotations/{no}", headers=hdr, json={"status": "待審核", "data": _data(
+            quoteNo=no, docType="quote", columnLabels={"brand": "規格", "item": "品項"},
+            approval={"status": "pending", "reasons": []})})          # 用戶端把 docType 改成 quote 也騙不了：類型以資料庫為準
+        assert r.status_code == 200, r.text
+        d = _row(no)[0]
+        assert d["docType"] == "estimate" and d["columnLabels"] == {"brand": "規格", "item": "品項"}
+        assert d["approval"]["reasons"] == [NOTE_I % "品項", NOTE_B % "規格"], d["approval"]["reasons"]
+        fields = {c["field"] for e in d["editHistory"] for c in e.get("changes", [])}
+        assert "欄名（廠牌 / 型號）" in fields
+
+    def test_estimate_without_labels_behaves_as_before(self, client, hdr):
+        no = _create(client, hdr, _data(docType="estimate", approval={"status": "pending", "reasons": []}), "待審核")
+        d = _row(no)[0]
+        assert "columnLabels" not in d and d["approval"]["reasons"] == ["標準報價單送出"]
 
     def test_update_changes_and_clearing_remove_keys_and_edit_history_records_change(self, client, hdr):
         no = _create(client, hdr, _data())

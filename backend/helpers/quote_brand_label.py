@@ -10,7 +10,7 @@
 - `label_of(q, col)`     這張單該欄實際要顯示的名稱（沒自訂 ⇒ 預設）
 - `change_reasons(q)`    簽核依據用的文字（每個被改的欄一行；沒變更 ⇒ []）：「欄名已由「廠牌 / 型號」變更為「○○」」
 
-目前只有「報價單」套用；估價單（共用同一個範本與表單）暫不跟進——要跟進時只改 `APPLIES_TO`。
+報價單與估價單（共用同一個範本與表單，使用者 2026-11-17 裁示一起改）都套用；要排除某種單據只改 `APPLIES_TO`。
 輸出到 HTML 的地方一律自己 esc（PDF 用 pdf_gen.esc；前端用 x-text／textContent）。
 
 [單位] helper:quote_brand_label    [層] L1    [穩定度] 契約
@@ -27,9 +27,9 @@ COLUMNS = {
     "item":  ("品名 / 規格說明", ("品名 / 規格說明", "品名", "品項", "項目", "規格說明")),
     "brand": ("廠牌 / 型號", ("料號", "型號", "規格", "廠牌 / 型號")),
 }
-APPLIES_TO = frozenset({_DT.QUOTE})            # 哪些單據類型套用自訂欄名
+APPLIES_TO = frozenset({_DT.QUOTE, _DT.ESTIMATE})            # 哪些單據類型套用自訂欄名
 
-_CTRL_RE = re.compile(r"[\x00-\x1f\x7f​-‏  ﻿]")
+_CTRL_RE = re.compile(r"[\x00-\x1f\x7f\u200b-\u200f\u2028\u2029\ufeff]")      # 控制字元、零寬字元（U+200B–200F）、行／段分隔（U+2028/2029）、BOM（U+FEFF）
 _WS_RE = re.compile(r"\s+")
 
 
@@ -54,7 +54,7 @@ def normalize(col: str, raw) -> str:
 
 
 def sanitize(q: dict) -> None:
-    """就地清理 q 裡的欄名物件。不適用的單據類型（估價單）、非物件、沒有任何有效欄 ⇒ 整個鍵移除，免得直接打 API 也寫得進去。"""
+    """就地清理 q 裡的欄名物件。不適用的單據類型（APPLIES_TO 以外）、非物件、沒有任何有效欄 ⇒ 整個鍵移除，免得直接打 API 也寫得進去。"""
     if not isinstance(q, dict) or KEY not in q:
         return
     raw = q.get(KEY)

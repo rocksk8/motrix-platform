@@ -1,7 +1,7 @@
 """瀏覽器端對端：報價單品項表欄名可自訂——「品名 / 規格說明」與「廠牌 / 型號」（2026-11-17）。
 
 編輯畫面：表頭預設原名稱；點表頭旁的鉛筆可改（常用選項＋自己打字）；改了之後表頭、欄位 placeholder 同步；
-存檔後寫進單據（data_json.columnLabels）、重新載入還在；清空＝回預設；舊單沒有這個鍵＝預設；估價單不顯示修改鈕、固定預設名稱。
+存檔後寫進單據（data_json.columnLabels）、重新載入還在；清空＝回預設；舊單沒有這個鍵＝預設；估價單（共用同一張表單）比照報價單。
 選擇器一律用 data-testid，不跟著欄名走。
 """
 import json
@@ -140,11 +140,47 @@ def test_legacy_quote_without_field_shows_defaults(live_server, make_user, e2e_b
 
 
 @pytest.mark.e2e
-def test_estimate_has_no_edit_buttons_and_keeps_defaults(live_server, make_user, e2e_browser):
+def test_estimate_shows_saved_labels_and_can_edit_and_save(live_server, make_user, e2e_browser):
     no = "ME-202611-911"
-    _seed(no, doc_type="estimate", labels={"brand": "料號", "item": "品項"})   # 即使資料裡有（直接寫庫）也不顯示、不套用
+    _seed(no, doc_type="estimate", labels={"brand": "料號", "item": "品項"})
     page = _open(live_server, make_user, e2e_browser, no, "e2e_bl4")
+    assert page.evaluate(f"{DATA}.q.docType") == "estimate"
     for col in ("item", "brand"):
-        assert page.locator(f"[data-testid='qf-col-label-edit-{col}']").is_hidden()
+        assert page.locator(f"[data-testid='qf-col-label-edit-{col}']").is_visible(), "估價單也有修改鈕"
+    assert _th_text(page, "brand") == "料號" and _th_text(page, "item") == "品項"
+    assert page.locator("[data-testid='qf-item-brand']").first.get_attribute("placeholder") == "料號"
+    _rename(page, "brand", "規格")
+    _rename(page, "item", "")                          # 清空 ⇒ 該欄回預設
+    assert _th_text(page, "brand") == "規格" and _th_text(page, "item") == ITEM
+    assert page.evaluate(f"{DATA}.apiSave(false).then(r => !!r)"), "存檔失敗"
+    assert _stored_labels(no) == {"brand": "規格"}
+    page.reload()
+    page.wait_for_function("() => document.body.innerText.includes('欄名客戶')", timeout=20000)
+    assert _th_text(page, "brand") == "規格" and _th_text(page, "item") == ITEM
+
+
+@pytest.mark.e2e
+def test_legacy_estimate_without_field_shows_defaults(live_server, make_user, e2e_browser):
+    no = "ME-202611-912"
+    _seed(no, doc_type="estimate")
+    page = _open(live_server, make_user, e2e_browser, no, "e2e_bl6")
     assert _th_text(page, "brand") == DEFAULT and _th_text(page, "item") == ITEM
     assert page.locator("[data-testid='qf-item-brand']").first.get_attribute("placeholder") == DEFAULT
+
+
+@pytest.mark.e2e
+def test_display_strips_invisible_chars_and_submit_notes_list_changed_columns(live_server, make_user, e2e_browser):
+    no = "MQ-202611-913"
+    _seed(no)
+    page = _open(live_server, make_user, e2e_browser, no, "e2e_bl7")
+    # 顯示函式與後端 normalize 同規則：零寬字元／控制字元去掉、與預設相同＝預設
+    got = page.evaluate("""() => { const d = %s; d.q.columnLabels = {brand: '料' + String.fromCharCode(0x200b) + '號' + String.fromCharCode(0xfeff), item: '%s'};
+        return [d.columnLabel('brand'), d.columnLabel('item'), d.columnLabelNotes()] }""" % (DATA, ITEM))
+    assert got[0] == "料號" and got[1] == ITEM
+    assert got[2] == ["欄名已由「廠牌 / 型號」變更為「料號」"], got
+    # 送簽確認視窗列出欄名變更；沒改就不出現
+    page.evaluate("() => { %s.showSubmitModal = true }" % DATA)
+    page.locator("[data-testid='qf-submit-col-notes']").wait_for(state="visible", timeout=10000)
+    assert "欄名已由「廠牌 / 型號」變更為「料號」" in page.locator("[data-testid='qf-submit-col-notes']").inner_text()
+    page.evaluate("() => { %s.q.columnLabels = {} }" % DATA)
+    page.locator("[data-testid='qf-submit-col-notes']").wait_for(state="detached", timeout=10000)
