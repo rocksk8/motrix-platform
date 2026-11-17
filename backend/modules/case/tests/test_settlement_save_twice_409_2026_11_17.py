@@ -59,12 +59,20 @@ def test_each_settlement_409_carries_its_own_fail_reason_code(case):
     # 稽核列：reason_code 與 detail.msg（只有欄位名稱，沒有金額）
     cn = db.get_db()
     try:
+        ok_det = json.loads(cn.execute("SELECT detail FROM audit_log WHERE action='quotation.settlement' ORDER BY id DESC LIMIT 1").fetchone()["detail"])
+    finally:
+        cn.close()
+    assert ok_det.get("updated_at") == ok.json()["updated_at"], "成功存檔的稽核要記回給頁面的版本戳記：%s" % ok_det
+    cn = db.get_db()
+    try:
         rows = [(r["reason_code"], json.loads(r["detail"] or "{}")) for r in cn.execute(
             "SELECT reason_code, detail FROM audit_log WHERE action='fail.PUT' ORDER BY id").fetchall()]
     finally:
         cn.close()
     codes = {code for code, _ in rows}
     assert "stale_version" in codes, rows
+    assert rows[0][0] == "stale_version" and g["updatedAt"] in rows[0][1].get("msg", "") and ok.json()["updated_at"] in rows[0][1].get("msg", ""), \
+        "版本衝突的稽核要記頁面帶的與資料庫現值：%s" % (rows[0],)
     # 同一人同路由同狀態 60 秒內只寫一列，第二次併入 repeat；它的原因在 last_reason／last_msg
     first = rows[0][1]
     assert first.get("repeat") == 1 and first.get("last_reason") == "finalize_mismatch", first
