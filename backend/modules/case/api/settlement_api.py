@@ -124,6 +124,11 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）
+        if body.settlement.get("status") == "finalized":       # 完結人／完結時間：用戶端沒帶（舊頁面、腳本）就由伺服器以操作者與當下時間補上；用戶端有帶的維持原值
+            if not str(body.settlement.get("finalizedBy") or "").strip():
+                body.settlement["finalizedBy"] = user.get("display_name") or user["username"]
+            if not str(body.settlement.get("finalizedAt") or "").strip():
+                body.settlement["finalizedAt"] = now
         data["settlement"] = body.settlement
 
         # append edit history entry for settlement saves

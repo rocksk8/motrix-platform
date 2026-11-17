@@ -18,7 +18,7 @@ import os
 import re
 import tempfile
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 
 from db import (
     get_db, is_demo_mode, DEMO_PDF_ARCHIVE_DIR, DEMO_SHIPPING_PDF_ARCHIVE_DIR,
@@ -2597,7 +2597,7 @@ def _case_closing_report_data(quote_no: str) -> dict:
                total, pretax, net_margin_pct, status,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') AS settle_status,
-               data_json, created_at
+               data_json, created_at, signed_at
         FROM quotations WHERE quote_no=?
     """, (quote_no,)).fetchone()
     if not row:
@@ -2641,6 +2641,17 @@ def _case_closing_report_data(quote_no: str) -> dict:
             won_at = r["at"]
         elif detail.get("to") == "已結案":
             closed_at = r["at"]
+    # 成案日期的取值順序（2026-11-17 使用者裁示）：①稽核紀錄裡最後一次轉成「已成案」的時間（audit_log 有保留期限，舊單可能已被清掉）
+    # ②報價單自己存的 dealWonAt（早期遷移依稽核寫入的副本，稽核被清掉後仍在）③客戶回簽日（quotations.signed_at）④空白（印「—」）
+    won_src = "audit" if won_at else ""
+    if not won_at:
+        _dw = str(d.get("dealWonAt") or "").strip()
+        if _dw:
+            won_at, won_src = _dw, "dealWonAt"
+    if not won_at:
+        _sg = str(row["signed_at"] or "").strip()
+        if _sg:
+            won_at, won_src = _sg, "signedAt"
 
     # 收款明細：跟 reports.py::_collect() 用同一套 payment_item_amounts() 換算，
     # 避免另外重寫一次 pct→金額的公式又跟其他報表的數字兜不起來。
@@ -2762,6 +2773,8 @@ def _case_closing_report_data(quote_no: str) -> dict:
         "salesPerson":  row["sales_person"] or "",
         "quoteDate":    row["quote_date"] or "",
         "wonAt":        won_at[:10] if won_at else "",
+        "wonAtSource":  won_src,
+        "finalizedMeta": _finalized_meta(settlement, d.get("editHistory")),
         "closedAt":     closed_at[:10] if closed_at else "",
         "dealTag":      row["deal_tag"] or "",
         "settleStatus": row["settle_status"] or "",
@@ -2777,6 +2790,34 @@ def _case_closing_report_data(quote_no: str) -> dict:
         "dispatches":   dispatches,
         "dispatchExcluded": dispatch_excluded,
     }
+
+
+def _tw_date(ts) -> str:
+    """完結時間（前端 toISOString＝UTC，結尾 Z）→ 台灣日期 yyyy-mm-dd。帶時區的換算成 +08:00；沒帶時區的（舊存檔／伺服器本地時間）視為台灣時間，取前 10 碼；解析不了回空字串。"""
+    t = str(ts or "").strip()
+    if not t:
+        return ""
+    try:
+        dt = datetime.fromisoformat(t.replace("Z", "+00:00"))
+    except ValueError:
+        return t[:10] if re.match(r"\d{4}-\d\d-\d\d", t) else ""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone(timedelta(hours=8)))
+    return dt.strftime("%Y-%m-%d")
+
+
+def _finalized_meta(settlement: dict, edit_history) -> dict:
+    """完結日期／完結人：優先用精算存檔自己的 finalizedAt／finalizedBy；缺（舊存檔、或前端沒帶人名）就退回編輯歷程裡最後一筆 settlement_finalized
+    （伺服器寫入的 frozenAt／at、byDisplay／by）。只用來顯示，不寫回資料。"""
+    st = settlement if isinstance(settlement, dict) else {}
+    at, by = str(st.get("finalizedAt") or "").strip(), str(st.get("finalizedBy") or "").strip()
+    if (not at or not by) and isinstance(edit_history, list):
+        for e in reversed(edit_history):
+            if isinstance(e, dict) and e.get("type") == "settlement_finalized":
+                at = at or str(e.get("frozenAt") or e.get("at") or "").strip()
+                by = by or str(e.get("byDisplay") or e.get("by") or "").strip()
+                break
+    return {"date": _tw_date(at), "by": by}
 
 
 def _build_case_closing_html(data: dict) -> str:
@@ -2838,7 +2879,9 @@ def _build_case_closing_html(data: dict) -> str:
         from helpers import profit_warning as _pw      # T64 A：利潤顏色門檻（設定 profit_warning.case_good／case_floor；預設 20／0＝今天）
         _pw_b = _pw.bands()
         settle_date = s.get("settlementDate", "") or ""
-        settle_by   = s.get("finalizedBy", "") or ""
+        _fm = data.get("finalizedMeta") or {}
+        settle_by   = (s.get("finalizedBy", "") or "") or _fm.get("by", "")
+        settle_fin  = _fm.get("date", "")
         # 35c：新完結案（稅基 B、dispatchBasis＝pretax）加一行稅額說明；舊完結案（沒有標記）維持原樣，一個位元組都不加
         dispatch_tax_note = (
             '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">承攬商：未稅 %s／稅額 %s（進項稅額，不計成本）</td></tr>'
@@ -2848,7 +2891,7 @@ def _build_case_closing_html(data: dict) -> str:
             % money(summary.get("dispatchTax"))
         ) if summary.get("dispatchBasis") == "taxed" else ""
         profit_section = f"""
-<div class="section-label">三、損益分析（精算完結 · 精算日期：{esc(settle_date) or '—'}　完結人：{esc(settle_by) or '—'}）</div>
+<div class="section-label">三、損益分析（精算完結 · 精算日期（手填）：{esc(settle_date) or '—'}　完結日期：{esc(settle_fin) or '—'}　完結人：{esc(settle_by) or '—'}）</div>
 <div class="profit-grid">
   <table>
     <thead><tr><th colspan="2" class="c" style="background:#F9FAFB;color:#374151">原始報價預估</th></tr></thead>
@@ -3076,6 +3119,8 @@ def _build_case_closing_html(data: dict) -> str:
         f'  <div><span>成案日期：</span>{esc(data["wonAt"]) or "—"}</div>\n'
         f'  <div><span>結案日期：</span>{esc(data["closedAt"]) or "—"}</div>\n'
         f'  <div><span>精算狀態：</span>{"已完結精算" if is_finalized else "尚未完成精算"}</div>\n'
+        + (f'  <div><span>精算日期（手填）：</span>{esc(str(s.get("settlementDate") or ""))}</div>\n'
+           if (not is_finalized and s.get("settlementDate")) else "") +
         '</div>\n'
         '<div class="section-label">一、收入與合約金額</div>\n'
         '<div class="total-box" style="justify-content:flex-start"><div class="total-table" style="width:320px">\n'
