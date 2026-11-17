@@ -2047,7 +2047,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     q["docType"] = _DT.norm(q.get("docType"))    # 先定類型：欄名清理與送簽註記要看它（下面開立時同一個值）
-    _BL.sanitize(q)                              # 品項欄名：去控制字元、截長、與預設相同＝移除；估價單一律不收
+    _BL.sanitize(q)                              # 品項欄名：去控制字元、截長、與預設相同＝移除；報價單與估價單都套用（要排除哪種單據只改 quote_brand_label.APPLIES_TO）
     _QIN.clean_items(q)                          # 品項備註排版 notesLayout：不認得的值清成預設（沒有這個鍵的舊單不動）
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
@@ -2608,7 +2608,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     q["quoteNo"] = quote_no
     if _oh_row:
         q["docType"] = _DT.norm(_oh_row["doc_type"])      # 單據類型以資料庫現值為準（之後同一規則）；欄名清理與送簽註記要先知道類型
-    _BL.sanitize(q)                                       # 品項欄名：去控制字元、截長、與預設相同＝移除；估價單一律不收
+    _BL.sanitize(q)                                       # 品項欄名：去控制字元、截長、與預設相同＝移除；報價單與估價單都套用（要排除哪種單據只改 quote_brand_label.APPLIES_TO）
     q.pop("editHistory", None)
     q.pop("clauseTitles", None)          # S-Q2：用戶端送的凍結值一律不採用；下面在寫入交易內依狀態轉換決定（凍結／沿用資料庫現值／清掉）
     _QIN.clean_items(q)                  # 品項備註排版 notesLayout：不認得的值清成預設（沒有這個鍵的舊單不動）
