@@ -102,6 +102,8 @@
    "helper:display_labels",
    "helper:quote_output",
    "helper:quote_privacy",
+   "helper:quote_brand_label",
+   "helper:quote_item_notes",
    "helper:menu_builder",
    "helper:export_templates",
    "helper:option_lists",
