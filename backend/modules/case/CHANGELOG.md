@@ -12,6 +12,7 @@
 - 附件目錄：新來源類型 `quotation_spec`（資料夾 `uploads/quotation_specs/`，讀取規則同案件頁可讀）；回收筒快照／還原認得 `spec_files_json`。
 - 內部：`modules/case/pdf_merge.py`（純函式併檔；放在 case 模組內不升核心，**下次升核心版時評估收斂為 L1**；`docs/platform/modules.json` 已登記 `mod:case/pdf_merge`、`mod:case/api/quotation_specs`）；`case.doc_version` 提供者改指 `quotation_specs.record_doc_version_with_merge`（先併檔、再呼叫原 `_record_doc_version`）。
 - 新增（解鎖編輯期間可上傳／刪除規格檔，使用者裁示 2026-11-17）：鎖定狀態（待審核／簽核中／已送出／已成案／已結案）下，**最高管理者且有解鎖驗證證明**（`verify-unlock` 寫的 `quotation.unlock` 稽核列，本人＋本單＋12 小時內；PUT 本身只驗身分，規格檔多這一道）才能傳＝**暫存**（`spec_files_json` 項目帶 `staged:{by,at}`，不進清單／檔案中心／合併／mergeFiles）；已生效的檔在解鎖中不能由 DELETE 刪（403，畫面標待刪）。`PUT /api/quotations/{no}` 的 `data._specChanges={add:[暫存id],remove:[id]}`（只收 `_isUnlockEdit`＋最高管理者，否則 400；不存進 data_json）在**同一個寫入交易**套用：暫存轉正、待刪移除、本人其餘暫存丟掉，實體檔 commit 之後才刪；套用後 ≤10 檔／≤50MB，`mergeFiles` 以套用後清單驗證；寫入 editHistory（解鎖那筆的 `changes`＝`規格文件`）與稽核 `quotation.apply_spec_changes`。新端點 `POST /api/quotations/{no}/spec-files/discard-staged`（放棄修改：清本人暫存，冪等；不需解鎖證明）；暫存 24 小時後由下一次碰規格端點的人懶清掃。上傳／刪除回應多 `staged`（本人暫存清單）。稽核：`quotation.stage_spec_files`／`quotation.discard_spec_files`／`quotation.apply_spec_changes`。
+- ⚠️ 已知缺口（既有，T88 不擴大範圍，PM 記入下一班待辦）：`PUT /api/quotations/{no}` 的解鎖編輯（`_isUnlockEdit`）伺服器端**只檢查角色是最高管理者**，不核對個人解鎖密碼；`verify-unlock` 只是畫面流程、伺服器不留解鎖狀態，所以最高管理者直接帶 `_isUnlockEdit` 即可繞過解鎖密碼。**規格檔這條路徑（暫存上傳、套用 `_specChanges`）刻意比 PUT 嚴**：要求 `audit_log` 有本人、本單、12 小時內的 `quotation.unlock`（`verify-unlock` 通過才寫）。
 - 前端：無（由 h15 接）。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
