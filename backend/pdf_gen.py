@@ -167,7 +167,7 @@ def _untaxed_manual_items(settlement):
 
 def _cost_basis_note(kind, summary, settlement=None):
     """40（進項稅階段 0）：成本分項旁的稅基說明行——只加文字、不改任何金額或標籤。kind＝item／extra（承攬商那行維持 35c 的「新口徑才印稅額說明」，舊完結案的輸出與新版只差那一行，有守門題釘住）。
-    品項（2026-11-17）：傳入 `settlement` 且有手填未稅品項時，註記改依實際稅別寫（不再一律寫「含 5% 稅」），並多一行稅基提醒；沒有這類品項 ⇒ 與舊版逐字相同。"""
+    品項（2026-11-17）：傳入 `settlement` 且有手填未稅品項時，註記改依實際稅別寫（不再一律寫「含 5% 稅」），並多一行稅基提醒；沒有這類品項 ⇒ 維持原文字。"""
     texts = {
         "item": "品項：含 5% 稅（估計＝報價成本×1.05，假設進項稅不可扣抵；採購單／材料申請為含稅最終金額）",
         "extra": "額外支出：單據金額，未拆稅",
@@ -180,14 +180,14 @@ def _cost_basis_note(kind, summary, settlement=None):
         '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">品項：估計（報價成本×1.05）與採購單／材料申請（含稅最終金額）為含稅；'
         '手填品項依各自稅別計入，其中 %d 項（合計 %s）是未稅金額，沒有加 5%% 稅</td></tr>'
         '\n      <tr><td colspan="2" style="font-size:11px;color:#B45309">⚠ 稅基提醒：這 %d 項與左欄原始預估（含 5%% 稅）稅基不同，'
-        '比較「實際比預估好」時約 %s（%s×5%%）是稅基差、不是實際節省；已完結的精算數字未調整。</td></tr>'
+        '比較「實際比預估好」時約 %s（%s×5%%）可能是稅基差，不一定是實際節省；已完結的精算數字未調整。</td></tr>'
         % (n, f(total), n, f(total * 0.05), f(total)))
 
 
 def _orig_cost_row(summary, money):
     """原始成本（料件）列。`origDirectProfit`＝報價稅前收入 − 含稅成本（成本×1.05）：精算報表曾印未稅成本，讀者用 收入 − 成本 對不出毛利。
     summary 同時有 quotedPretax／origTotalCost／origDirectProfit，且「收入 − 毛利」恰為 原始成本×1.05（容差 2 元）⇒ 改印含稅成本並註明未稅金額；
-    其餘情況（舊完結案、缺鍵、毛利不是這個口徑）⇒ 維持原樣逐字不變。純顯示。"""
+    其餘情況（缺鍵、毛利不是這個口徑）⇒ 維持原樣。純顯示。"""
     sm = summary or {}
     row = '<tr><td>原始成本（料件）</td><td class="r">%s</td></tr>' % money(sm.get("origTotalCost"))
     try:

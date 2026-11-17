@@ -147,7 +147,7 @@ def test_item_note_follows_actual_tax_modes_and_warns_about_untaxed_items(client
     _seed()
     html = _html()
     assert "手填品項依各自稅別計入，其中 4 項（合計 262,059）是未稅金額，沒有加 5% 稅" in html     # 採用系統採購的、人力、含稅自動加總的都不算
-    assert "約 13,103（262,059×5%）是稅基差、不是實際節省" in html
+    assert "約 13,103（262,059×5%）可能是稅基差，不一定是實際節省" in html
     assert "品項：含 5% 稅（估計＝報價成本×1.05" not in html, "有未稅手填品項時，不可再一律寫『品項：含 5% 稅』"
 
 
