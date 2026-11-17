@@ -78,7 +78,14 @@ def test_no_remarks_means_no_new_markup():
 
 
 def test_estimate_doc_type_shares_the_same_table():
-    q = _q()
-    q["docType"] = "estimate"
-    h = _html(q)
-    assert 'class="remark-row' in h and "估價單" in h
+    """估價單與報價單共用同一支 builder（使用者 2026-11-17 裁示「估價單一起改」）：備註同樣下移、沒有備註欄。"""
+    for internal, span, ncols in ((False, "6", 7), (True, "8", 9)):
+        q = _q()
+        q["docType"] = "estimate"
+        h = _html(q, internal=internal)
+        assert "<title>MQ-T-1 估價單</title>" in h                          # 確實走的是估價單用語
+        t = _table(h)
+        assert re.findall(r'<tr class="remark-row[^"]*"><td></td><td colspan="(\d+)"', t) == [span, span]
+        assert LONG in t and "含安裝" in t
+        assert h.count("<th") - h.count("<thead") == ncols                  # 沒有備註欄
+        assert ">備註</th>" not in h

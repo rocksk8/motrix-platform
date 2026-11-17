@@ -16,6 +16,14 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-17 報價單／估價單：品項備註一律移到該品項下方整列，取消「備註」欄（feat/quote-remark-below-row）
+
+- **現象**：備註欄只有 72px，長備註把一列撐到 10 行。
+- **改法（使用者 2026-11-17 裁示「有備註一律移到下方」）**：`pdf_gen._build_quote_html_core` 有備註的品項下方多一列 `remark-row`，從「品名」欄（# 欄之後）橫跨到最右（客戶版 colspan 6、內部版含成本／毛利率 8），淡底＋左側細線＋「備註」小標，保留換行；備註欄表頭與儲存格移除；分組標題列 colspan 與欄數一致；備註列與品項列不拆頁；斑馬紋以品項為單位。
+- **估價單同步（使用者裁示「估價單一起改」）**：估價單與報價單共用同一支 builder，兩者一起套用，不拆版型。畫面預覽（iframe）與 PDF 同源，所以同時改變；編輯畫面不變。
+- **相容**：整張單都沒有備註時輸出逐位元不變，`tests/platform/pdf_golden` 不需更新。
+- **測試**：`test_quote_remark_below_row_2026_11_17.py`（含估價單客戶版／內部版）、`test_e2e_quote_remark_below_row_2026_11_17.py`。
+
 ## 2026-11-13 T84：apply 停服要認得 autostart_guard.bat 迴圈；啟動後 schema 兜底（fix/apply-respawn-guard-t84）
 
 - **現象**（T82 套用）：第一次啟動漏跑 core migration 13／14、accounting 載入印舊版號 1.1.67，/api/ping 照過、套用報成功；重啟後才正常。
