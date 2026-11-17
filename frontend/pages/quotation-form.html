@@ -4001,7 +4001,7 @@
       restoreSpec(id) { this.specPendingDelete = this.specPendingDelete.filter(x => x !== id); this.setDirty() },
       specSelected(id) { return (this.q.mergeFiles || []).includes(id) },
       specMeta(f) {
-        const kb = f.size ? (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB') : ''
+        const kb = f.size ? (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB') : ''  /* 非金額：檔案大小 KB */
         return [f.pages ? f.pages + ' 頁' : '', kb].filter(Boolean).join('・')
       },
       specWarn(f) {

@@ -252,7 +252,7 @@ def test_reverse_control_removing_the_gate_from_pdf_identity_head_turns_pdfs_red
     src = dict(product_sources())
     pg = src["pdf_gen.py"]
     for fn in ("_identity_head", "_identity_foot", "_identity_foot_short"):
-        pg = pg.replace("def %s(" % fn, "def %s_x(" % fn).replace("%s(_ident)" % fn, "%s_x(_ident)" % fn)
+        pg = pg.replace("%s(" % fn, "%s_x(" % fn)          # 定義與所有呼叫形式（`fn(_ident)`、`fn(ident, with_demo=False)`、`fn(ident)`）一次換掉
     pg = pg.replace("require_for_output(", "_nothing(")
     src["pdf_gen.py"] = pg
     src["modules/case/completion_pdf.py"] = src["modules/case/completion_pdf.py"].replace(
