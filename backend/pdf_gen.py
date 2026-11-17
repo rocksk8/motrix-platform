@@ -280,6 +280,118 @@ def _alt_view(q: dict) -> dict:
     return v if isinstance(v, dict) and v.get("has_alt") else {}
 
 
+# 字寬表（em）：用 Chromium canvas.measureText 在 12px 實測（內文＝Microsoft JhengHei；數字欄＝Arial），取平均後湊整
+_EM_TEXT = {'M': .98, 'W': .98, '@': .98, '-': .43, '/': .42, '.': .23, ',': .23, ':': .23, ';': .23, '|': .25,
+            ' ': .25, '(': .32, ')': .32, '[': .32, ']': .32}
+_EM_LETTER = dict(zip(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+    (.69, .61, .67, .75, .54, .52, .74, .76, .28, .38, .62, .51, .97, .81, .81, .60, .81, .64, .57, .56, .74, .67, 1.0, .63, .59, .61,
+     .55, .63, .50, .63, .56, .33, .63, .61, .26, .26, .53, .26, .93, .61, .63, .63, .63, .37, .46, .36, .61, .51, .77, .49, .52, .49)))
+_EM_NUM = {',': .28, '.': .28, ' ': .28, 'N': .72, 'T': .61, '$': .556, '%': .89}
+
+
+def _est_px(s: str, size: float = 12.0, num: bool = False) -> float:
+    """依實測字寬表估一段文字的顯示寬度（px）：CJK／全形＝1em；`num=True` 用數字欄的 Arial 字寬（金額），否則用內文字型。
+    只用來決定欄寬（不是排版本身）；實測誤差 ≈ ±2%。"""
+    w = 0.0
+    for ch in s:
+        if ord(ch) >= 0x2E80:
+            w += 1.0
+        elif num:
+            w += _EM_NUM.get(ch, .556 if ch.isdigit() else .6)
+        elif ch in _EM_TEXT:
+            w += _EM_TEXT[ch]
+        elif ch in _EM_LETTER:
+            w += _EM_LETTER[ch]
+        elif ch.isdigit():
+            w += .58
+        else:
+            w += .55
+    return w * size
+
+
+def _quote_col_widths(items: list, internal: bool, total: float = 695.0):
+    """報價單品項表的欄寬（px，依欄序，總和＝total）；沒有需要調整 ⇒ None（表頭維持原本的寬度提示，輸出逐位元不變）。
+
+    需要調整＝廠牌／型號有比預設 110px 放得下更長的料號、品名最長一行放不進預設 190px，或金額比預設欄寬放得下更大。
+    此時改用 table-layout:fixed ＋ <colgroup>（百分比，頁面被縮放時各欄等比，見 _quote_colgroup），規則（使用者 2026-11-17）：
+    1. 數字欄（數量／單位／單價／金額，內部版另有成本／毛利率）維持原本寬度（48／70／120／120／100／64），不主動縮；金額更大才加寬；
+    2. 品名、廠牌／型號依內容取「放得下就好」的寬度（品名上限 360px、料號用實測字寬估算只留 2px 邊距）；
+    3. 需要的寬度加起來超過可用寬度時，才從數字欄借（依各欄可借的量比例，借到「剛好放得下最大金額、不比表頭窄」為止）；
+       還不夠才縮品名（到最小寬度），最後才縮料號欄（在「-」處換行）；
+    4. 有剩餘空白時，各欄依目前寬度比例平均分，不是全塞給品名欄。
+    ⚠️ 不依賴表頭文字（廠牌／型號欄名可由使用者自訂），只看品項資料。欄序：# 品名 廠牌 數量 單位 [成本 毛利率] 單價 金額。"""
+    its = [it for it in items if it.get('type') != 'header']
+    PAD = 12 if internal else 20                # 儲存格左右內距（外部版 9+9，內部版縮成 5+5）＋ 2px 邊距
+
+    def money(v):
+        try:
+            return 'NT$ ' + f'{int(v or 0):,}'
+        except (TypeError, ValueError):
+            return ''
+
+    def need(vals, lo, num=False):
+        return max([lo] + [int(_est_px(str(v), num=num) + PAD + 0.999) for v in vals])
+    b_need = max([0] + [int(_est_px(t) + PAD + 0.999) for it in its for t in str(it.get('brand') or '').split()])
+    # 數字欄的「剛好」＝內容放得下且不比表頭窄（表頭 11px、字距 .04em：單價（未稅額）80、金額（未稅）69、單位成本 46、毛利率 34、數量／單位 23）
+    price_fit = need((money(it.get('unitPrice')) for it in its), 80 + PAD, True)
+    amt_fit = need((money(it.get('amount')) for it in its), 69 + PAD, True)
+    cost_fit = need((money(it.get('cost')) for it in its), 46 + PAD, True) if internal else 0
+    # 品名：最長的一行（換行符分行）放得下需要的寬度，上限 360px（再長就讓它換行）
+    n_need = min(360, max([0] + [int(_est_px(ln) + PAD + 0.999) for it in its
+                                 for ln in str(it.get('description') or '').split('\n')]))
+    if not (b_need > 110 or n_need > 190 or price_fit > 120 or amt_fit > 120 or cost_fit > 100):
+        return None                             # 短料號、品名放得下、金額不大 ⇒ 完全不動（舊單版面不變）
+    hash_fit = need((str(len(its) + 1),), 28)
+    qty_fit = need((str(it.get('qty', '')) for it in its), 23 + PAD)
+    unit_fit = need((str(it.get('unit') or '') for it in its), 23 + PAD)
+    margin_fit = 34 + PAD + 6 if internal else 0                  # 「30.0%」放得下
+    # 數字欄：預設寬度（但不小於內容需要），可借到 fit
+    nums = [('hash', hash_fit, hash_fit), ('qty', max(48, qty_fit), qty_fit), ('unit', max(70, unit_fit), unit_fit)]
+    if internal:
+        nums += [('cost', max(100, cost_fit), cost_fit), ('margin', max(64, margin_fit), margin_fit)]
+    nums += [('price', max(120, price_fit), price_fit), ('amt', max(120, amt_fit), amt_fit)]
+    cur = {k: float(c) for k, c, _ in nums}
+    fit = {k: float(f) for k, _, f in nums}
+    name_min = 170.0 if internal else 140.0
+    brand_min = float(68 + PAD)                                   # 預設表頭「廠牌 / 型號」放得下
+    name = float(min(360, max(120, n_need)))
+    brand = float(max(brand_min, b_need))
+    want = sum(cur.values()) + name + brand
+    if want > total:                                              # 不夠用：先借數字欄，再縮品名，最後縮料號
+        deficit = want - total
+        slack = {k: cur[k] - fit[k] for k in cur}
+        s = sum(slack.values())
+        if s > 0:
+            take = min(deficit, s)
+            for k in cur:
+                cur[k] -= take * slack[k] / s
+            deficit -= take
+        if deficit > 0:
+            t = min(deficit, max(0.0, name - name_min))
+            name -= t
+            deficit -= t
+        if deficit > 0:
+            brand = max(brand_min, brand - deficit)
+    else:                                                         # 有剩餘：各欄依目前寬度比例分
+        f = total / want
+        cur = {k: v * f for k, v in cur.items()}
+        name *= f
+        brand *= f
+    cols = [int(round(cur['hash'])), int(round(name)), int(round(brand)), int(round(cur['qty'])), int(round(cur['unit']))]
+    cols += ([int(round(cur['cost'])), int(round(cur['margin']))] if internal else [])
+    cols += [int(round(cur['price'])), int(round(cur['amt']))]
+    cols[1] += int(round(total)) - sum(cols)                      # 湊整：誤差併入品名
+    return cols
+
+
+def _quote_colgroup(cols: list, total: float = 695.0) -> str:
+    """<colgroup>：各欄寬度用百分比（=px/total），頁面被縮放（長單 zoom<1，版面寬度大於 695px）時各欄等比，不會有欄被多撐。"""
+    pct = [round(w / total * 100, 3) for w in cols]
+    pct[1] = round(100 - sum(pct) + pct[1], 3)                    # 總和精確＝100%
+    return '<colgroup>' + ''.join(f'<col style="width:{p}%">' for p in pct) + '</colgroup>\n'
+
+
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
@@ -318,14 +430,30 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
-    has_notes = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
     av = _alt_view(q)                       # 擇一方案（沒有 ⇒ {}，以下全部走原路徑）
     alt_rows = av.get('rows') or {}
+    # 備註一律移到該品項下方整列；整張單都沒有備註時，輸出與過去逐位元相同（沒有備註欄、沒有新 class／CSS）
+    has_remarks = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
+    # 品名／廠牌型號依內容自動分配欄寬、數字欄縮到剛好放得下最大金額（見 _quote_col_widths）；
+    # 短料號、品名放得下、金額不大（舊單）⇒ None ⇒ 沒有任何新 class／CSS／colgroup，輸出逐位元不變
+    _cw = _quote_col_widths(items, internal)
+    from helpers import quote_item_notes as _qin
+    def _remark_row(note, span, zebra, layout=_qin.WRAP):
+        # 備註一律移到該品項下方，從「品名」欄（# 欄之後）橫跨到最右；與上方品項同一斑馬色。
+        # 排版每個品項各自選：wrap（預設）＝保留換行；inline＝一行到底（換行轉全形空白，排滿才自然折行）
+        if not note:
+            return ''
+        body = esc(_qin.flatten_inline(note)) if layout == _qin.INLINE else esc(note).replace(chr(10), "<br>")
+        return (f'<tr class="remark-row{" z" if zebra else ""}"><td></td>'
+                f'<td colspan="{span}"><div class="rbox"><b>備註</b>{body}</div></td></tr>')
     item_rows = ''
     real_idx = 0
+    _row_n = 0                              # 已輸出的品項／分組列序（備註列不計）⇒ 斑馬紋以品項為單位，備註列跟著上方品項同色
+    _ncols = 9 if internal else 7           # 品項表欄數（備註欄已取消，備註一律改成品項下方整列）
     for i, item in enumerate(items):
         if item.get('type') == 'header':
-            colspan = (9 if internal else 7) - (0 if has_notes else 1)
+            colspan = _ncols - 1
+            _row_n += 1
             item_rows += (
                 f'<tr style="background:#EFF6FF">'
                 f'<td style="text-align:center;color:#93C5FD;font-size:10px">§</td>'
@@ -340,7 +468,11 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         real_idx += 1
         up  = item.get('unitPrice', 0)
         amt = item.get('amount', 0)
-        tr_open = '<tr style="color:#9CA3AF">' if info and info.get('state') == 'dropped' else '<tr>'
+        _note = (item.get('notes') or '').strip()
+        _row_n += 1
+        _cls = ' '.join(c for c in ('z' if _row_n % 2 == 0 else '', 'has-below' if _note else '') if c) if has_remarks else ''
+        _cls_attr = f' class="{_cls}"' if _cls else ''
+        tr_open = f'<tr{_cls_attr} style="color:#9CA3AF">' if info and info.get('state') == 'dropped' else f'<tr{_cls_attr}>'
         desc_html = esc(item.get("description", "")) + (f' <span style="font-size:10px;color:#6B7280">〔{esc(info.get("tag", ""))}：{esc(info.get("group", ""))}〕</span>' if info and info.get('state') != 'dropped' else (f' <span style="font-size:10px">〔{esc(info.get("tag", ""))}〕</span>' if info else ''))
         if internal:
             cost   = item.get('cost', 0) or 0
@@ -356,8 +488,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td class="r cost-cell">{f"{margin*100:.1f}%" if margin else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
-                f'</tr>'
+                + f'</tr>'
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0, _qin.layout_of(item))
             )
         else:
             item_rows += (
@@ -369,8 +501,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td>{esc(item.get("unit",""))}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
-                + (f'<td>{esc(item.get("notes",""))}</td>' if has_notes else '') +
-                f'</tr>'
+                + f'</tr>'
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0, _qin.layout_of(item))
             )
 
     subtotal = tot.get('subtotal', 0)
@@ -441,7 +573,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '@bottom-center{content:counter(page);font-family:Arial,sans-serif;font-size:9px;color:#aaa}}\n'
         '  @media print{html,body{margin:0;padding:0;background:#fff}#root{padding:15mm 0 0}.sign{page-break-inside:avoid}.totals{page-break-inside:avoid}.totals-group{page-break-inside:avoid}.terms{page-break-inside:avoid}tr{page-break-inside:avoid}}\n'
         '  .cost-cell{background:#FFF8F0}\n'
-        '  .cost-banner{background:#FFF3E0;border:1px solid #F59E0B;border-radius:4px;padding:6px 12px;font-size:10px;color:#92400E;margin-bottom:10px;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
+        + ('  thead th.cost-cell{background:#0A0A0A}\n' if internal else '')   # 表頭成本兩格維持深底；淡橘底只給 tbody 的 td（否則白字配淡底看不見）
+        + '  .cost-banner{background:#FFF3E0;border:1px solid #F59E0B;border-radius:4px;padding:6px 12px;font-size:10px;color:#92400E;margin-bottom:10px;font-family:Arial,sans-serif;letter-spacing:.04em}\n'
         '  .accent-bar{height:3px;background:#0A0A0A;margin-bottom:18px}\n'
         '  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:1px solid #0A0A0A;margin-bottom:16px}\n'
         '  .co-name{font-size:15px;font-weight:700;letter-spacing:.06em}\n'
@@ -463,7 +596,23 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  tbody td{padding:8px 9px;border-bottom:1px solid #EDEAE4;font-size:12px;text-align:center}\n'
         '  tbody tr:last-child td{border-bottom:none}\n'
         '  tbody tr:nth-child(even) td{background:#FAFAF8}\n'
-        '  td.r{text-align:center;font-family:Arial,sans-serif}\n'
+        + ('  tbody tr:nth-child(even) td{background:none}\n'      # 有備註列時斑馬紋改以品項為單位（備註列跟著上方品項同色），備註列不與品項列拆頁
+           '  tbody tr.z td{background:#FAFAF8}\n'
+           '  tbody tr.has-below td{border-bottom:none}\n'
+           '  tbody tr.remark-row{page-break-before:avoid;break-before:avoid}\n'
+           '  tbody tr.has-below{page-break-after:avoid;break-after:avoid}\n'
+           '  tbody tr.remark-row td{padding:0 9px 8px;text-align:left}\n'
+           # 備註框的色票全取自報價單既有樣式：底 #FAFAF8／框 #EDEAE4／圓角 4px（＝ .term-item）、字 #666（＝ .term-block）、
+           # 小標 Arial 9px #999 600 字距 .1em（＝ .term-title）、左側強調線 #999（＝ 小標灰）
+           '  .rbox{background:#FAFAF8;border:1px solid #EDEAE4;border-left:3px solid #999;border-radius:4px;padding:5px 10px;font-size:11px;color:#666;line-height:1.6;text-align:left}\n'
+           '  .rbox b{font-family:Arial,sans-serif;font-size:9px;color:#999;font-weight:600;letter-spacing:.1em;margin-right:8px}\n' if has_remarks else '')
+        + ('  tbody tr td.cost-cell{background:#FFF8F0}\n' if internal else '')   # 內部版成本欄每列都淡橘底，不受斑馬紋（nth-child／.z）影響：權重相同、寫在斑馬規則之後
+        + ('  table.items{table-layout:fixed}\n'                       # 欄寬由 <colgroup> 決定（依內容算出）；品名欄不給寬度，吃剩餘
+           '  table.items thead th{width:auto!important}\n'          # 表頭 <th style="width:..."> 的預設寬度提示作廢（否則品名欄的 th 寬度會把剩餘寬度按比例攤給所有欄）
+           '  table.items tbody td.r{white-space:nowrap}\n'
+           + ('  table.items thead th,table.items tbody td{padding-left:5px;padding-right:5px}\n' if internal else '')   # 內部版欄多：內距縮小，空間留給品名／料號
+           if _cw else '')
+        + '  td.r{text-align:center;font-family:Arial,sans-serif}\n'
         '  .totals{max-width:290px;margin-left:auto;border:1px solid #EDEAE4;border-radius:4px;overflow:hidden;margin-bottom:16px}\n'
         '  .total-row{display:flex;justify-content:space-between;padding:7px 13px;border-bottom:1px solid #F0EEE9;font-size:12px}\n'
         '  .total-row:last-child{border-bottom:none;font-weight:700;font-size:14px;background:#F5F4F0;border-top:1.5px solid #0A0A0A}\n'
@@ -553,8 +702,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '</div>\n'
         + (f'<div class="cost-banner">⚠ 內部版（含成本）— 請勿對外提供</div>\n' if internal else '')
         + '<div class="section-label">三、項目明細</div>\n'
-        '<table>\n'
-        '  <thead>\n'
+        + ('<table class="items">\n  ' + _quote_colgroup(_cw) if _cw else '<table>\n')
+        + '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
         '      <th style="width:190px">品名 / 規格說明</th>\n'
@@ -565,7 +714,6 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
            '      <th class="r cost-cell" style="width:64px">毛利率</th>\n' if internal else '')
         + '      <th class="r" style="width:120px">單價（未稅額）</th>\n'
         '      <th class="r" style="width:120px">金額（未稅）</th>\n'
-        + ('      <th style="width:72px">備註</th>\n' if has_notes else '')
         + '    </tr>\n'
         '  </thead>\n'
         + f'  <tbody>{item_rows}</tbody>\n'

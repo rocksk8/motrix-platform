@@ -301,6 +301,9 @@
     .row-tools { margin-top: 2px; display: flex; gap: 8px; }
     .row-tool { border: none; background: none; padding: 0 2px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
     .row-tool:hover { color: var(--accent); text-decoration: underline; }
+    .note-layout { align-items: center; }
+    .note-layout-label { font-size: 12px; color: var(--text-dim); }
+    .note-layout .row-tool.on { color: var(--accent); font-weight: 600; text-decoration: underline; }
     /* ── V3.40（C1）成本區收合時的一行摘要 ── */
     .cost-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
                   padding: 9px 12px; margin-bottom: 14px; background: #FAFAF8; border: 1px solid var(--border-light); border-radius: var(--radius); }
@@ -1834,6 +1837,16 @@
                                 @input="setDirty(); autoGrow($el)"
                                 x-init="autoGrowInit($el); if (item.notes && !notesOpen[item.id]) notesOpen = { ...notesOpen, [item.id]: true }; if (notesOpen[item.id] && !item.notes) $nextTick(() => $el.focus())"
                                 x-effect="item.notes; autoGrowLater($el)"></textarea>
+                    </template>
+                    <!-- 備註排版（每個品項各自選）：依輸入換行（預設）／連成一行（換行轉全形空白，排滿才折行）；存在品項的 notesLayout（'wrap'｜'inline'），不影響最後一頁的備註事項 -->
+                    <template x-if="item.type !== 'header' && (item.notes || notesOpen[item.id])">
+                      <div class="row-tools note-layout" role="group" aria-label="備註排版" data-testid="qf-note-layout">
+                        <span class="note-layout-label">備註排版</span>
+                        <button type="button" class="row-tool" :class="{ on: item.notesLayout !== 'inline' }" :aria-pressed="item.notesLayout !== 'inline'"
+                                @click="item.notesLayout = 'wrap'; setDirty()" data-testid="qf-note-layout-wrap" title="依輸入的換行顯示">依輸入換行</button>
+                        <button type="button" class="row-tool" :class="{ on: item.notesLayout === 'inline' }" :aria-pressed="item.notesLayout === 'inline'"
+                                @click="item.notesLayout = 'inline'; setDirty()" data-testid="qf-note-layout-inline" title="忽略換行，連成一行，排滿再自然換行">連成一行</button>
+                      </div>
                     </template>
                     <div class="row-tools" x-show="item.type !== 'header' && !(item.notes || notesOpen[item.id])">
                       <button type="button" class="row-tool" @click="notesOpen = { ...notesOpen, [item.id]: true }" data-testid="qf-add-note">＋備註</button>
