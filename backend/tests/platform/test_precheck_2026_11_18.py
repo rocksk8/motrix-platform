@@ -63,7 +63,7 @@ def test_pm_named_guards_are_in_the_set():
     paths = {e["path"] for e in PC.load_sets()["files"]}
     for must in ("tests/platform/test_module_boundaries.py", "tests/platform/test_l1_does_not_load_m01.py", "tests/test_pdf_escape_2026_10_14.py",
                  "tests/platform/test_e2e_lint_2026_11_13.py", "tests/platform/test_no_text_anchor_in_tests_2026_11_14.py",
-                 "tests/platform/test_audit_reads_scoped_to_own_rows_2026_11_14.py", "tests/platform/test_generated_maps.py",
+                 "tests/platform/test_audit_reads_scoped_to_own_rows_2026_11_14.py",
                  "tests/platform/test_case_summary_purpose.py", "tests/platform/test_route_inventory.py", "tests/platform/test_page_paths_centralized.py"):
         assert must in paths, must
 
@@ -78,7 +78,7 @@ def test_static_classification(code, cls):
 
 def test_failure_classification_uses_file_entry_then_group():
     sets = PC.load_sets()
-    cls, fix, _why = PC.classify_failure("tests/platform/test_generated_maps.py::test_x", sets)
+    cls, fix, _why = PC.classify_failure("tests/platform/test_changelog_sections.py::test_x", sets)
     assert cls == "closing" and fix
     cls, fix, _why = PC.classify_failure("backend/tests/test_pdf_escape_2026_10_14.py::test_ratchet", sets)
     assert cls == "author" and "esc" in fix
