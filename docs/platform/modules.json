@@ -482,6 +482,7 @@
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition",
+    "mod:case/money_num",
     "js:js/case-management-biz.js",
     "js:js/case-management-close.js",
     "js:js/case-management-completion.js",
@@ -729,6 +730,7 @@
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:arap/receivables",
+    "mod:arap/money_num",
     "mod:arap/attachments"
    ],
    "tables": [

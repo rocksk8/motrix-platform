@@ -1,5 +1,9 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-11-17（fix/quote-total-text-500；舊資料報價單金額存成文字）
+- 修正（無 API／欄位／權限變更；乾淨數字資料輸出逐位元不變）：舊資料 `quotations.total`／`pretax` 存成文字（"12,345"）時，營運報表（financial／excel／pdf、customer-history、monthly-trend）不再 500；文字轉數字、無法解析的當 0。共用輔助放在各模組內（`modules/arap/money_num.py`、`modules/case/money_num.py`；analytics 沿用既有 `reports._money`，pdf_gen 沿用 L1 的 `tax_calc._parse_money`），規則與 T87 `tax_calc._parse_money`／`reports._num_or_bad` 相同；`helpers/` 下每個檔都必須歸屬 L1 或某模組，新增 helper＝改 L1 介面＝升核心版，本批不升。測試：`tests/test_quote_total_text_500_2026_11_17.py`。
+- 待辦（下次升核心版時）：把 `tax_calc._parse_money` 公開成 L1 函式，arap／case／analytics 三份收斂到它，刪除 `modules/arap/money_num.py`、`modules/case/money_num.py`。
+
 ## 1.0.55 — 2026-11-15（T87 整合：B1 標準報表後端＋髒款項防護、B2 自訂報表；版號由列車取）
 - **（併入）(next) — 2026-11-14（feat/t87-b1-be-h8；T87 B1 標準報表後端）**
 - 新增 5 張標準報表（營收、毛利、應收帳齡、案件進度、業務漏斗）與共用篩選（期間、業務、客戶、部門；營收另有收入口徑）：`GET /api/std-reports`（目錄與可用性）、`GET /api/std-reports/{id}`（資料）、`GET /api/std-reports/{id}/excel`、`/pdf`（匯出，寫稽核、冷卻、PDF 姊妹）。新檔 `api/std_reports.py`；線上格式由前後端約定（設計文件 B1-reports.md、B1-api-contract.md，T87 設計資料夾）。

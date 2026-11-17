@@ -112,6 +112,7 @@ def _FAIL_HDR(code: str) -> dict:
     return {"X-Fail-Reason": code}
 
 from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from modules.case.money_num import money_num   # 舊資料金額存成文字（"12,345"）時轉數字，壞值當 0（不 500）
 from helpers.field_policy import mask_flags as _mask_flags, tier_allowed as _tier_allowed   # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生（出口保留自己的 money 短路）
 from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：案件批次匯出的欄位目錄）
 
@@ -5384,7 +5385,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         raise
 
     data  = json.loads(row["data_json"] or "{}")
-    total = float(row["total"] or 0)
+    total = float(money_num(row["total"]))
     pay_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
     receivable = summarize_payment_items(total, pay_items, row["pretax"])
 
@@ -7509,7 +7510,7 @@ def detail_quotation(conn, doc_no):
         "fields": [
             {"label": "報價日期", "value": r["quote_date"] or "—"},
             {"label": "業務", "value": r["sales_person"] or "—"},
-            {"label": "總金額", "value": format(r["total"] or 0, ",.0f")},
+            {"label": "總金額", "value": format(money_num(r["total"]), ",.0f")},
             {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
         ],
         "items": d.get("items") or [],

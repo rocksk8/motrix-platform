@@ -23,6 +23,7 @@ from datetime import date
 
 from fastapi import HTTPException
 
+from modules.case.money_num import money_num   # 舊資料金額存成文字（"12,345"）時轉數字，壞值當 0（不 500）
 from helpers.dates import normalize_date  # noqa: F401  2026-09-26 下沉 L1（M04 搬遷）；本檔與 M01 呼叫端照舊從這裡取
 from modules.case import expense_forms as _EF      # 請購單（purchase_req）不入支出：payable_sql
 from modules.case.quotations import round_half_up, quote_tax_type
@@ -82,7 +83,7 @@ def stage_revenue(pretax, stages):
 
     回 `{"entries": [{label, date, amount}], "flags": set, "unrecognized": 金額}`。
     """
-    pretax = float(pretax or 0)
+    pretax = float(money_num(pretax))     # 舊資料 pretax 存成文字（"11,757"）時轉數字，壞值當 0（不 500）
     flags = set()
     entries = []
     stages = list(stages or [])
@@ -591,7 +592,7 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
         rev = stage_revenue(r["pretax"], stages.get(r["quote_no"], []))
         for kind in ("stage_ratio_unset", "stage_ratio_not_100", "case_incomplete"):
             if kind in rev["flags"]:
-                amt = rev["unrecognized"] if kind == "case_incomplete" else r["pretax"]
+                amt = rev["unrecognized"] if kind == "case_incomplete" else money_num(r["pretax"], None)    # NULL／壞值＝沒有金額（輸出 null，與改前一致）
                 flags[kind].append(_flag_item(r["quote_no"], r["customer_name"], "案件",
                                               r["project_name"] or "", amt, "", money_ok, kind))
         try:
@@ -600,5 +601,5 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
             data = {}
         if quote_tax_type(data) == "legacy":
             flags["legacy_tax"].append(_flag_item(r["quote_no"], r["customer_name"], "報價單",
-                                                  "稅率 %s%%" % data.get("taxRate"), r["total"], "", money_ok, "legacy_tax"))
+                                                  "稅率 %s%%" % data.get("taxRate"), money_num(r["total"], None), "", money_ok, "legacy_tax"))
     return {k: {"label": FLAG_LABELS[k], "count": len(v), "items": v} for k, v in flags.items()}

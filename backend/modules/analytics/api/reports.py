@@ -578,7 +578,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "hasPaymentItems": has_pay,
             "roles":          roles,
             "total":          total,
-            "pretax":         row["pretax"] or 0,
+            "pretax":         pretax or 0,                      # 清洗後的數字（文字 "11,757" 轉數字、壞值 0）；原本直接放資料庫值，文字時下游加總 TypeError
             "netMarginPct":   float(row["net_margin_pct"] or 0),
             "receivedAmount": recv_amt,
             "collectionRate": round(recv_amt / total * 100, 1) if total > 0 else 0,
@@ -3137,7 +3137,7 @@ def customer_history(authorization: str = Header(None)):
         if cust not in by_cust:
             by_cust[cust] = {"txns": [], "sp_cnt": {}}
 
-        total = row["total"] or 0
+        total = _money(row["total"])                       # 舊資料 total 存成文字（"12,345"）時轉數字；壞掉的當 0（不 500）
         cr = {}
         if row["cr_json"]:
             try:
@@ -3419,8 +3419,8 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
     conn.close()
 
     for row in rows:
-        total  = row["total"]  or 0
-        pretax = row["pretax"] or 0
+        total  = _money(row["total"])                      # 同上：文字金額轉數字，壞掉當 0
+        pretax = _money(row["pretax"])
         nm     = float(row["net_margin_pct"] or 0)
         # 用 quote_won_month_map 決定的月份（見 helpers/quotations.py 說明：
         # 優先 quote_date，quote_date 缺漏或誤填未來日期才退回 audit_log 成案
