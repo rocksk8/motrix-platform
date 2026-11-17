@@ -582,6 +582,11 @@
                       <option value="taxed">含稅5%</option>
                       <option value="taxed_gross">含稅5%（自動加總）</option>
                     </select>
+                    <!-- 稅基提醒（只提示、不改資料）：「未稅」「含稅5%」都讓實際成本落在未稅基準，與原始估計（報價成本×1.05）稅基不同；填的若是未稅進價，請改選「含稅5%（自動加總）」 -->
+                    <div class="noprint" :data-testid="'stl-taxbasis-warn-' + item.id" style="margin-top:3px;font-size:10px;line-height:1.4;color:#B45309"
+                         x-show="(item.actualCostTaxMode === 'pretax' || item.actualCostTaxMode === 'taxed') && item.actualTotalCost > 0 && !item.adoptSystem && item.actualSource !== 'labor'">
+                      此列未加 5% 稅，與原始估計（含 5% 稅）稅基不同；填的若是未稅進價，請改選「含稅5%（自動加總）」。
+                    </div>
                   </td>
                   <td data-label="實際總成本" class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="_filled(item) ? 'NT$ ' + fmt(item.actualTotalCost) : '—'" :data-testid="'stl-actual-total-' + item.id"></span>

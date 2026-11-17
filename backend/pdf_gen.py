@@ -148,13 +148,79 @@ def _item_actual_text(settlement, item, money):
     return money(v) if filled else "未填寫"
 
 
-def _cost_basis_note(kind, summary):
-    """40（進項稅階段 0）：成本分項旁的稅基說明行——只加文字、不改任何金額或標籤。kind＝item／extra（承攬商那行維持 35c 的「新口徑才印稅額說明」，舊完結案的輸出與新版只差那一行，有守門題釘住）。"""
+def _untaxed_manual_items(settlement):
+    """手填且**明確標了稅別**為「未稅」或「含稅5%（÷1.05 換回未稅）」的品項實際成本——這兩種都落在未稅基準，沒有加 5% 稅，
+    與原始預估（報價成本×1.05）稅基不同。回 `(項數, 合計)`。不計：採用系統採購的品項（含稅最終金額）、來源標「人力」的（人力沒有進項稅）、
+    沒填或 0 的、沒有稅別欄位的舊存檔（舊口徑凍結，不判定對錯）。只讀存檔，不改任何資料。"""
+    n, total = 0, 0.0
+    for it in ((settlement or {}).get("items") or []):
+        if not isinstance(it, dict) or it.get("adoptSystem") or it.get("actualSource") == "labor":
+            continue
+        if it.get("actualCostTaxMode") not in ("pretax", "taxed"):
+            continue
+        v = it.get("actualTotalCost")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+            continue
+        n, total = n + 1, total + float(v)
+    return n, total
+
+
+def _cost_basis_note(kind, summary, settlement=None):
+    """40（進項稅階段 0）：成本分項旁的稅基說明行——只加文字、不改任何金額或標籤。kind＝item／extra（承攬商那行維持 35c 的「新口徑才印稅額說明」，舊完結案的輸出與新版只差那一行，有守門題釘住）。
+    品項（2026-11-17）：傳入 `settlement` 且有手填未稅品項時，註記改依實際稅別寫（不再一律寫「含 5% 稅」），並多一行稅基提醒；沒有這類品項 ⇒ 與舊版逐字相同。"""
     texts = {
         "item": "品項：含 5% 稅（估計＝報價成本×1.05，假設進項稅不可扣抵；採購單／材料申請為含稅最終金額）",
         "extra": "額外支出：單據金額，未拆稅",
     }
-    return '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">%s</td></tr>' % texts[kind]
+    n, total = _untaxed_manual_items(settlement) if kind == "item" else (0, 0.0)
+    if not n:
+        return '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">%s</td></tr>' % texts[kind]
+    f = lambda v: "{:,}".format(int(round(float(v))))        # noqa: E731
+    return (
+        '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">品項：估計（報價成本×1.05）與採購單／材料申請（含稅最終金額）為含稅；'
+        '手填品項依各自稅別計入，其中 %d 項（合計 %s）是未稅金額，沒有加 5%% 稅</td></tr>'
+        '\n      <tr><td colspan="2" style="font-size:11px;color:#B45309">⚠ 稅基提醒：這 %d 項與左欄原始預估（含 5%% 稅）稅基不同，'
+        '比較「實際比預估好」時約 %s（%s×5%%）是稅基差、不是實際節省；已完結的精算數字未調整。</td></tr>'
+        % (n, f(total), n, f(total * 0.05), f(total)))
+
+
+def _orig_cost_row(summary, money):
+    """原始成本（料件）列。`origDirectProfit`＝報價稅前收入 − 含稅成本（成本×1.05）：精算報表曾印未稅成本，讀者用 收入 − 成本 對不出毛利。
+    summary 同時有 quotedPretax／origTotalCost／origDirectProfit，且「收入 − 毛利」恰為 原始成本×1.05（容差 2 元）⇒ 改印含稅成本並註明未稅金額；
+    其餘情況（舊完結案、缺鍵、毛利不是這個口徑）⇒ 維持原樣逐字不變。純顯示。"""
+    sm = summary or {}
+    row = '<tr><td>原始成本（料件）</td><td class="r">%s</td></tr>' % money(sm.get("origTotalCost"))
+    try:
+        qp, oc, odp = sm.get("quotedPretax"), sm.get("origTotalCost"), sm.get("origDirectProfit")
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (qp, oc, odp)) or oc <= 0:
+            return row
+        implied = qp - odp
+        if abs(implied - oc) > 2 and abs(implied - oc * 1.05) <= 2:
+            return ('<tr><td>原始成本（料件，含 5%% 稅估計）</td><td class="r">%s</td></tr>'
+                    '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">報價成本（未稅）%s ×1.05；報價稅前收入 − 原始成本 ＝ 原始直接毛利</td></tr>'
+                    % (money(implied), money(oc)))
+    except Exception:                                   # noqa: BLE001 — 顯示用，算不出就維持原樣
+        pass
+    return row
+
+
+def _dispatch_unassigned_row(summary, money):
+    """承攬商派發「未對應品項」的金額獨立一列（使用者 2026-11-17；正式機 MQ-202607-045 的外包人員 6,000 沒有任何一列直接寫出）。
+    只在完結 summary 有 `dispatchUnassignedTotal` 且 >0 時才印（舊完結案沒有這鍵 ⇒ 空字串、一個位元組都不加）。
+    若 品項實際成本＋額外支出＋未對應派發 剛好＝實際總成本（容差 1 元）⇒ 補一行等式，讓讀者自己加得出來。"""
+    sm = summary or {}
+    u = sm.get("dispatchUnassignedTotal")
+    if isinstance(u, bool) or not isinstance(u, (int, float)) or u <= 0:
+        return ""
+    out = '\n      <tr><td style="padding-left:18px">其中：承攬商未對應品項</td><td class="r orange">%s</td></tr>' % money(u)
+    try:
+        a, e, t = float(sm.get("itemActualTotal") or 0), float(sm.get("extraTotal") or 0), float(sm.get("totalActualCost") or 0)
+        if abs(a + e + u - t) <= 1:
+            out += ('\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">品項實際成本 %s ＋ 額外支出 %s ＋ 承攬商未對應品項 %s ＝ 實際總成本 %s</td></tr>'
+                    % (money(a), money(e), money(u), money(t)))
+    except (TypeError, ValueError):
+        pass
+    return out
 
 
 def _dispatch_absorbed_row(summary, money=None):
@@ -2638,26 +2704,54 @@ def _case_closing_report_data(quote_no: str) -> dict:
     # 承攬商／外包派發明細（排除已取消，比照精算頁「唯讀讀取」的既有規則；
     # status 存的是英文代碼 draft/sent/confirmed/pending_acceptance/accepted/
     # completed/cancelled，見 routers/vendor_contractors.py::_STATUS_LABELS）
+    # 金額口徑與精算相同（modules/case/settlement_actuals.dispatch_rows，使用者 2026-11-17「結案報表第六節」）：
+    # 未稅承攬費＋稅額＋外包人員（personnel_json）。只有外包人員、items 空的派發單 total_amount 是 0，金額在人員欄，不能只取 total_amount。
+    # 草稿／已退回的派發單精算不計成本 ⇒ 這裡也不列（否則本節合計對不上第三節），只在表尾註記張數。
+    # 讀法與精算同：經 `dispatch.row` 連接器取公開形狀（M04 不在 ⇒ 沒有連接器 ⇒ 退回只取 total_amount 的舊行為）。
     dispatch_rows = conn.execute("""
-        SELECT cd.dispatch_date, cd.scope, cd.total_amount, cd.status, cd.invoice_no,
-               vc.name AS vendor_name
+        SELECT cd.*, vc.name AS vendor_name
         FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id
         WHERE cd.quote_no=? AND cd.status != 'cancelled'
-        ORDER BY cd.dispatch_date
+        ORDER BY cd.dispatch_date, cd.id
     """, (quote_no,)).fetchall()
     _dispatch_status_labels = {
         "draft": "草稿", "sent": "已送出", "confirmed": "已確認",
         "pending_acceptance": "待驗收", "accepted": "已驗收",
         "completed": "完工", "cancelled": "已取消",
     }
-    dispatches = [{
-        "vendorName": r["vendor_name"] or "（外包人員）",
-        "date":       r["dispatch_date"] or "",
-        "scope":      r["scope"] or "",
-        "amount":     r["total_amount"] or 0,
-        "status":     _dispatch_status_labels.get(r["status"] or "draft", r["status"] or ""),
-        "invoiceNo":  r["invoice_no"] or "",
-    } for r in dispatch_rows]
+    try:
+        from core import registry as _registry
+        _dispatch_row_of = _registry.single_provider("dispatch.row")
+    except Exception:                                   # noqa: BLE001 — 連接器取不到 ⇒ 舊行為
+        _dispatch_row_of = None
+    _dp_pretax_basis = ((settlement.get("summary") or {}).get("dispatchBasis") == "pretax")   # 35c／36 期間完結：計入成本＝未稅承攬費＋人員（稅額只顯示）；其餘（含舊案）＝含稅合計
+    dispatches, dispatch_excluded = [], 0
+    for r in dispatch_rows:
+        fee = r["total_amount"] or 0
+        tax = pers = 0
+        amount = fee
+        if _dispatch_row_of is not None:
+            try:
+                d = _dispatch_row_of(r)
+            except Exception:                           # noqa: BLE001 — 單張資料壞掉不擋整份報表：以舊行為列出
+                d = None
+            if d is not None:
+                if (d.get("approvalStatus") or "") in ("草稿", "已退回"):
+                    dispatch_excluded += 1
+                    continue
+                fee, pers = d.get("totalAmount") or 0, d.get("personnelTotal") or 0
+                grand = d.get("grandTotal") or (fee + pers)
+                tax = max(0, grand - fee - pers)
+                amount = (fee + pers) if _dp_pretax_basis else grand
+        dispatches.append({
+            "vendorName": r["vendor_name"] or "（外包人員）",
+            "date":       r["dispatch_date"] or "",
+            "scope":      r["scope"] or "",
+            "amount":     amount,                       # 計入成本的金額（與精算同口徑）
+            "fee":        fee, "tax": tax, "personnel": pers,
+            "status":     _dispatch_status_labels.get(r["status"] or "draft", r["status"] or ""),
+            "invoiceNo":  r["invoice_no"] or "",
+        })
 
     conn.close()
 
@@ -2675,11 +2769,13 @@ def _case_closing_report_data(quote_no: str) -> dict:
         "pretax":       row["pretax"] or 0,
         "taxAmount":    total - (row["pretax"] or 0),
         "paymentRows":  payment_rows,
-        "receivedTotal": sum((pr["actualAmount"] if pr["actualAmount"] is not None else pr["amount"])
+        # 已收金額＝各列「實收淨額」（銀行入帳）相加：與逐列顯示同一個函式。只有 amount＋feeAmount、沒有 actualAmount 的列要扣手續費，否則合計比逐列加總多出手續費
+        "receivedTotal": sum(_receipt_amounts(pr["amount"], pr["actualAmount"], pr["feeAmount"])[0]
                              for pr in payment_rows if pr["received"]),
         "settlement":   settlement,
         "stages":       stages,
         "dispatches":   dispatches,
+        "dispatchExcluded": dispatch_excluded,
     }
 
 
@@ -2719,6 +2815,8 @@ def _build_case_closing_html(data: dict) -> str:
             f'<td>{esc(pr["note"])}</td></tr>'
         )
     collection_rate = round(data["receivedTotal"] / data["total"] * 100, 1) if data["total"] > 0 else 0
+    if data["total"] > 0 and data["receivedTotal"] < data["total"] and collection_rate >= 100:
+        collection_rate = f'{min(data["receivedTotal"] / data["total"] * 100, 99.99):.2f}'      # 還有尾差沒收到時不印 100.0%（四捨五入會讓 99.99% 看起來收齊）
     _no_pay_row = '<tr><td colspan="8" class="c" style="color:#9CA3AF">無款項明細資料</td></tr>'
     payment_section = (
         '<div class="section-label">二、收款明細</div>'
@@ -2756,7 +2854,7 @@ def _build_case_closing_html(data: dict) -> str:
     <thead><tr><th colspan="2" class="c" style="background:#F9FAFB;color:#374151">原始報價預估</th></tr></thead>
     <tbody>
       <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
-      <tr><td>原始成本（料件）</td><td class="r">{money(summary.get("origTotalCost"))}</td></tr>
+      {_orig_cost_row(summary, money)}
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
       <tr><td>{admin_cost_label(summary, True, hide_default=True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
@@ -2769,10 +2867,10 @@ def _build_case_closing_html(data: dict) -> str:
     <thead><tr><th colspan="2" class="c" style="background:#FFFBEB;color:#92400E">實際成本精算</th></tr></thead>
     <tbody>
       <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
-      <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>{_cost_basis_note("item", summary)}
+      <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>{_cost_basis_note("item", summary, s)}
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>{_cost_basis_note("extra", summary)}
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}{_tax_expense_rows(summary, money)}
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}{_dispatch_unassigned_row(summary, money)}{_tax_expense_rows(summary, money)}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
@@ -2842,16 +2940,40 @@ def _build_case_closing_html(data: dict) -> str:
     ) if s.get("extraItems") else ""
 
     # ── 承攬商／外包派發明細 ────────────────────────────────────────────────
+    # 金額與精算同口徑：未稅承攬費＋稅額＋外包人員；「計入成本」＝精算計入的金額（含稅口徑＝三者相加；35c／36 未稅口徑＝稅額不計）。
+    # 合計列與第三節「承攬商派發成本」對得上；對不上（完結後派發單有異動）就明說，不讓讀者自己猜。
+    _dash = lambda v: money(v) if v else "—"                                   # noqa: E731
+    _dp_pretax = summary.get("dispatchBasis") == "pretax"
     dispatch_rows_html = "".join(
         f'<tr><td>{esc(dp["vendorName"])}</td><td>{esc(dp["date"])}</td><td>{esc(dp["scope"])}</td>'
-        f'<td class="c">{esc(dp["status"])}</td><td class="r">{money(dp["amount"])}</td></tr>'
+        f'<td class="c">{esc(dp["status"])}</td><td class="r">{_dash(dp["fee"])}</td><td class="r">{_dash(dp["tax"])}</td>'
+        f'<td class="r">{_dash(dp["personnel"])}</td><td class="r">{money(dp["amount"])}</td></tr>'
         for dp in data["dispatches"]
     )
+    _dp_sum = sum(dp["amount"] for dp in data["dispatches"])
+    _dp_notes = []
+    if is_finalized and summary.get("dispatchTotal") is not None:
+        _dp_total = summary.get("dispatchTotal") or 0
+        if abs(_dp_sum - _dp_total) <= 1:
+            _dp_notes.append(f'本節合計 {money(_dp_sum)} ＝ 第三節「承攬商派發成本」{money(_dp_total)}。')
+        else:
+            _dp_notes.append(f'⚠ 本節合計 {money(_dp_sum)} 與第三節「承攬商派發成本」{money(_dp_total)} 不同（差 {money(abs(_dp_sum - _dp_total))}）：'
+                             '精算完結後派發單可能有異動，第三節以完結當下的數字為準。')
+        _un = summary.get("dispatchUnassignedTotal")
+        if isinstance(_un, (int, float)) and not isinstance(_un, bool) and _un > 0:
+            _dp_notes.append(f'其中未對應品項 {money(_un)}（不在任何品項的實際成本內，第三節另列一行）。')
+    if data.get("dispatchExcluded"):
+        _dp_notes.append(f'另有 {data["dispatchExcluded"]} 張草稿／已退回的派發單，精算不計成本，未列出。')
+    dispatch_notes_html = "".join(f'<div style="font-size:11px;color:#6B7280;margin:-4px 0 4px">{esc(t)}</div>' for t in _dp_notes)
     dispatch_section = (
         f'<div class="section-label">{next(_cn_nums)}、承攬商／外包派發明細</div>'
-        '<table><thead><tr><th>承攬商／人員</th><th style="width:90px">派發日期</th><th>派發範圍</th>'
-        '<th class="c" style="width:70px">狀態</th><th class="r" style="width:100px">金額</th></tr></thead>'
-        f'<tbody>{dispatch_rows_html}</tbody></table>'
+        '<table><thead><tr><th>承攬商／人員</th><th style="width:80px">派發日期</th><th>派發範圍</th>'
+        '<th class="c" style="width:56px">狀態</th><th class="r" style="width:78px">承攬費（未稅）</th>'
+        f'<th class="r" style="width:68px">{"稅額（不計入）" if _dp_pretax else "稅額"}</th>'
+        '<th class="r" style="width:72px">外包人員</th><th class="r" style="width:84px">計入成本</th></tr></thead>'
+        f'<tbody>{dispatch_rows_html}'
+        f'<tr class="bold-row"><td colspan="7">合計（計入成本）</td><td class="r">{money(_dp_sum)}</td></tr></tbody></table>'
+        f'{dispatch_notes_html}'
     ) if data["dispatches"] else ""
 
     # ── 執行進度 ─────────────────────────────────────────────────────────────
