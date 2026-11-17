@@ -280,33 +280,48 @@ def _alt_view(q: dict) -> dict:
     return v if isinstance(v, dict) and v.get("has_alt") else {}
 
 
-def _est_px(s: str, size: float = 12.0) -> float:
-    """粗估一段文字的顯示寬度（px）：CJK／全形＝1em，寬字母（M W @）與大寫較寬，窄標點與空白較窄。
-    只用來判斷『哪些料號長到要禁止在字中間斷行』，不是排版本身（排版交給瀏覽器的自動欄寬）。"""
+# 字寬表（em）：用 Chromium canvas.measureText 在 12px 實測（內文＝Microsoft JhengHei；數字欄＝Arial），取平均後湊整
+_EM_TEXT = {'M': .98, 'W': .98, '@': .98, '-': .43, '/': .42, '.': .23, ',': .23, ':': .23, ';': .23, '|': .25,
+            ' ': .25, '(': .32, ')': .32, '[': .32, ']': .32}
+_EM_LETTER = dict(zip(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+    (.69, .61, .67, .75, .54, .52, .74, .76, .28, .38, .62, .51, .97, .81, .81, .60, .81, .64, .57, .56, .74, .67, 1.0, .63, .59, .61,
+     .55, .63, .50, .63, .56, .33, .63, .61, .26, .26, .53, .26, .93, .61, .63, .63, .63, .37, .46, .36, .61, .51, .77, .49, .52, .49)))
+_EM_NUM = {',': .28, '.': .28, ' ': .28, 'N': .72, 'T': .61, '$': .556, '%': .89}
+
+
+def _est_px(s: str, size: float = 12.0, num: bool = False) -> float:
+    """依實測字寬表估一段文字的顯示寬度（px）：CJK／全形＝1em；`num=True` 用數字欄的 Arial 字寬（金額），否則用內文字型。
+    只用來決定欄寬（不是排版本身）；實測誤差 ≈ ±2%。"""
     w = 0.0
     for ch in s:
         if ord(ch) >= 0x2E80:
             w += 1.0
-        elif ch in 'MW@':
-            w += 0.80
-        elif ch.isupper():
-            w += 0.64
-        elif ch in '-/.,:;|()[] ':
-            w += 0.32
+        elif num:
+            w += _EM_NUM.get(ch, .556 if ch.isdigit() else .6)
+        elif ch in _EM_TEXT:
+            w += _EM_TEXT[ch]
+        elif ch in _EM_LETTER:
+            w += _EM_LETTER[ch]
+        elif ch.isdigit():
+            w += .58
         else:
-            w += 0.54
+            w += .55
     return w * size
 
 
 def _quote_col_widths(items: list, internal: bool, total: float = 695.0):
     """報價單品項表的欄寬（px，依欄序）；沒有需要調整 ⇒ None（表頭維持原本的寬度提示，輸出逐位元不變）。
 
-    需要調整＝廠牌／型號有比預設 110px 放得下更長的料號，或金額比預設欄寬放得下更大（千萬級）。
-    此時改用 table-layout:fixed ＋ <colgroup>：廠牌欄加寬到剛好放得下最長料號（單一詞，空白分隔；上限留給品名欄最小寬度），
-    數字欄縮到剛好放得下該單最大金額（有下限＝表頭放得下），#／數量／單位同樣依內容；剩下的全給品名欄。
+    需要調整＝廠牌／型號有比預設 110px 放得下更長的料號、品名最長一行放不進預設 190px，或金額比預設欄寬放得下更大。
+    此時改用 table-layout:fixed ＋ <colgroup>：
+    - 廠牌／型號＝剛好放得下最長料號（單一詞，空白分隔；上限留給品名欄最小寬度，再長就在「-」處換行）；
+    - 數字欄＝剛好放得下該單最大金額（下限＝表頭放得下）；#／數量／單位依內容；
+    - 品名欄**不給寬度**（見 _quote_colgroup）：吃掉所有剩餘寬度——頁面被縮放（長單 zoom<1）時，版面寬度比 695px 大，
+      多出來的全都給品名，不會被各欄等比放大而浪費。回傳值裡的品名寬度＝以 `total`(A4 可列印寬 695px) 算出的預估，只供參考／測試。
     ⚠️ 不依賴表頭文字（廠牌／型號欄名可由使用者自訂），只看品項資料。欄序：# 品名 廠牌 數量 單位 [成本 毛利率] 單價 金額。"""
     its = [it for it in items if it.get('type') != 'header']
-    PAD = 14 if internal else 22                # 儲存格左右內距（內部版欄多、縮成 10）＋ 估算誤差 4
+    PAD = 12 if internal else 20                # 儲存格左右內距（外部版 9+9，內部版縮成 5+5）＋ 2px 邊距
 
     def money(v):
         try:
@@ -314,30 +329,32 @@ def _quote_col_widths(items: list, internal: bool, total: float = 695.0):
         except (TypeError, ValueError):
             return ''
 
-    def need(vals, lo):
-        return max([lo] + [int(_est_px(str(v)) + PAD + 0.999) for v in vals])
+    def need(vals, lo, num=False):
+        return max([lo] + [int(_est_px(str(v), num=num) + PAD + 0.999) for v in vals])
     b_need = max([0] + [int(_est_px(t) + PAD + 0.999) for it in its for t in str(it.get('brand') or '').split()])
-    price = need((money(it.get('unitPrice')) for it in its), 92 if internal else 100)
-    amt = need((money(it.get('amount')) for it in its), 92 if internal else 100)
-    cost = need((money(it.get('cost')) for it in its), 80) if internal else 0
+    # 下限＝該欄表頭（11px，字距 .04em）放得下：單價（未稅額）80、金額（未稅）69、單位成本 46、毛利率 34、數量／單位 23
+    price = need((money(it.get('unitPrice')) for it in its), 80 + PAD, True)
+    amt = need((money(it.get('amount')) for it in its), 69 + PAD, True)
+    cost = need((money(it.get('cost')) for it in its), 46 + PAD, True) if internal else 0
     # 品名：最長的一行（換行符分行）放得下需要的寬度，上限 360px（再長就讓它換行）
     n_need = min(360, max([0] + [int(_est_px(ln) + PAD + 0.999) for it in its
                                  for ln in str(it.get('description') or '').split('\n')]))
     if not (b_need > 110 or n_need > 190 or price > 120 or amt > 120 or cost > 100):
         return None                             # 短料號、品名放得下、金額不大 ⇒ 完全不動（舊單版面不變）
     hashw = need((str(len(its) + 1),), 28)
-    qty = need((str(it.get('qty', '')) for it in its), 44 if internal else 48)
-    unit = need((str(it.get('unit') or '') for it in its), 48 if internal else 52)
-    margin = 56 if internal else 0
+    qty = need((str(it.get('qty', '')) for it in its), 23 + PAD)
+    unit = need((str(it.get('unit') or '') for it in its), 23 + PAD)
+    margin = 34 + PAD + 6 if internal else 0    # 「30.0%」放得下
     rest = int(total - (hashw + qty + unit + cost + margin + price + amt))   # 品名＋廠牌／型號 共用的寬度
-    name_min = 100 if internal else 140
-    # 料號優先放得下（不拆字），上限＝留給品名欄最小寬度；短料號縮到 90px（表頭放得下）
-    brand = max(90, min(max(b_need, 90), rest - name_min))
+    name_min = 170 if internal else 140
+    brand = max(68 + PAD, min(max(b_need, 68 + PAD), rest - name_min))      # 下限＝預設表頭「廠牌 / 型號」放得下
     name = rest - brand
-    if name > n_need + 20:                      # 品名很短、料號也有放得下 ⇒ 多出來的寬度兩欄平分，不要讓品名欄一片空白
-        extra = name - n_need
-        name, brand = n_need + extra // 2, brand + (extra - extra // 2)
     return [hashw, name, brand, qty, unit] + ([cost, margin] if internal else []) + [price, amt]
+
+
+def _quote_colgroup(cols: list) -> str:
+    """<colgroup>：除了品名欄（第 2 欄）以外都給寬度；品名欄不給，由 table-layout:fixed 把剩餘寬度全部分給它。"""
+    return '<colgroup>' + ''.join('<col>' if i == 1 else f'<col style="width:{w}px">' for i, w in enumerate(cols)) + '</colgroup>\n'
 
 
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
@@ -547,9 +564,12 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
            '  tbody tr.remark-row{page-break-before:avoid;break-before:avoid}\n'
            '  tbody tr.has-below{page-break-after:avoid;break-after:avoid}\n'
            '  tbody tr.remark-row td{padding:0 9px 8px;text-align:left}\n'
-           '  .rbox{border-left:3px solid #94A3B8;background:#F4F4EE;padding:5px 10px;font-size:11px;color:#374151;line-height:1.6;text-align:left}\n'
-           '  .rbox b{color:#64748B;font-weight:600;margin-right:8px}\n' if has_remarks else '')
-        + ('  table.items{table-layout:fixed}\n'                       # 欄寬由 <colgroup> 決定（依內容算出）
+           # 備註框的色票全取自報價單既有樣式：底 #FAFAF8／框 #EDEAE4／圓角 4px（＝ .term-item）、字 #666（＝ .term-block）、
+           # 小標 Arial 9px #999 600 字距 .1em（＝ .term-title）、左側強調線 #999（＝ 小標灰）
+           '  .rbox{background:#FAFAF8;border:1px solid #EDEAE4;border-left:3px solid #999;border-radius:4px;padding:5px 10px;font-size:11px;color:#666;line-height:1.6;text-align:left}\n'
+           '  .rbox b{font-family:Arial,sans-serif;font-size:9px;color:#999;font-weight:600;letter-spacing:.1em;margin-right:8px}\n' if has_remarks else '')
+        + ('  table.items{table-layout:fixed}\n'                       # 欄寬由 <colgroup> 決定（依內容算出）；品名欄不給寬度，吃剩餘
+           '  table.items thead th{width:auto!important}\n'          # 表頭 <th style="width:..."> 的預設寬度提示作廢（否則品名欄的 th 寬度會把剩餘寬度按比例攤給所有欄）
            '  table.items tbody td.r{white-space:nowrap}\n'
            + ('  table.items thead th,table.items tbody td{padding-left:5px;padding-right:5px}\n' if internal else '')   # 內部版欄多：內距縮小，空間留給品名／料號
            if _cw else '')
@@ -643,7 +663,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '</div>\n'
         + (f'<div class="cost-banner">⚠ 內部版（含成本）— 請勿對外提供</div>\n' if internal else '')
         + '<div class="section-label">三、項目明細</div>\n'
-        + ('<table class="items">\n  <colgroup>' + ''.join(f'<col style="width:{w}px">' for w in _cw) + '</colgroup>\n' if _cw else '<table>\n')
+        + ('<table class="items">\n  ' + _quote_colgroup(_cw) if _cw else '<table>\n')
         + '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'

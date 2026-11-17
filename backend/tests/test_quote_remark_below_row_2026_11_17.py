@@ -113,32 +113,33 @@ def test_long_part_number_widens_brand_column_and_numeric_columns_give_way():
     q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")
     w = _widths(q["items"])                                    # # 品名 廠牌 數量 單位 單價 金額
     assert len(w) == 7 and abs(sum(w) - 695) <= 1, w
-    assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 22 and w[2] > 110
+    assert w[2] >= pdf_gen._est_px("SR-S-VMS-Mini2-516-AID04") + 20 and w[2] > 110
     assert w[5] <= 120 and w[6] <= 120 and w[1] >= 100        # 數字欄不比預設寬，品名欄保有最小寬度
     h = _html(q)
-    assert '<table class="items">' in h and h.count("<col ") == 7
+    assert '<table class="items">' in h and len(re.findall(r"<col[ >]", h)) == 7
+    assert "<colgroup><col style=\"width:" in h and "<col><col style" in h      # 品名（第 2 欄）不給寬度：吃掉所有剩餘寬度
     assert "table.items{table-layout:fixed}" in h
 
 
 def test_long_name_short_part_number_widens_name_and_shrinks_brand():
     q = _rows(brand="HDD-8TB", name="監控級硬碟 8TB，7x24 小時運轉專用，含安裝與資料遷移，附原廠保固卡與出貨檢測報告")
     w = _widths(q["items"])
-    assert w[1] > 190 and w[2] < 110 and w[2] >= 90 and abs(sum(w) - 695) <= 1, w
+    assert w[1] > 190 and w[2] < 110 and w[2] >= 88 and abs(sum(w) - 695) <= 1, w
 
 
 def test_big_amounts_get_their_width_and_never_below_the_need():
     q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="y", price=98765432)
     w = _widths(q["items"])
-    need = int(pdf_gen._est_px("NT$ 98,765,432") + 22)
+    need = int(pdf_gen._est_px("NT$ 98,765,432", num=True) + 20)
     assert w[5] >= need and w[6] >= need and abs(sum(w) - 695) <= 1, (w, need)
     wi = _widths(q["items"], internal=True)                    # # 品名 廠牌 數量 單位 成本 毛利率 單價 金額
-    assert len(wi) == 9 and abs(sum(wi) - 695) <= 1 and wi[7] >= int(pdf_gen._est_px("NT$ 98,765,432") + 14)
+    assert len(wi) == 9 and abs(sum(wi) - 695) <= 1 and wi[7] >= int(pdf_gen._est_px("NT$ 98,765,432", num=True) + 12)
 
 
 def test_internal_version_has_nine_columns_and_tighter_padding():
     q = _rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機")
     h = _html(q, internal=True)
-    assert h.count("<col ") == 9 and "padding-left:5px;padding-right:5px" in h
+    assert len(re.findall(r"<col[ >]", h)) == 9 and "padding-left:5px;padding-right:5px" in h
 
 
 def test_widths_do_not_depend_on_header_text():
@@ -152,3 +153,37 @@ def test_cost_cell_tint_is_pinned_when_remark_rows_shift_the_zebra():
     h = _html(_q(), internal=True)
     a, b = h.index("tbody tr td.cost-cell{background:#FFF8F0}"), h.index("tbody tr.z td{background:#FAFAF8}")
     assert h.index("tbody tr:nth-child(even) td{background:none}") < a < b
+
+
+def test_estimator_matches_measured_chromium_widths():
+    """字寬表由 Chromium canvas.measureText 實測（12px）：誤差要在 ±4% 內，才能把邊距收到 2px。"""
+    for text, num, real in (("SR-S-VMS-Mini2-516-AID04", False, 161.4), ("Hikvision DS-2CD2143G2-IU", False, 160.6),
+                            ("DS-2CD2143G2-IU", False, 106.2), ("HDD-8TB", False, 53.5),
+                            ("NT$ 86,100", True, 62.7), ("NT$ 5,200", True, 56.0), ("NT$ 12,345,678", True, 86.1)):
+        got = pdf_gen._est_px(text, num=num)
+        assert abs(got - real) / real <= 0.04, (text, got, real)
+
+
+def test_name_column_has_no_width_so_it_takes_all_the_slack():
+    cg = pdf_gen._quote_colgroup([28, 300, 180, 48, 52, 100, 100])
+    assert cg.count("<col>") == 1 and cg.startswith('<colgroup><col style="width:28px"><col><col style="width:180px">')
+
+
+def test_remark_box_uses_only_colors_already_in_the_quote_stylesheet():
+    """使用者：備註的風格要跟報價單一致。.rbox 的每個色票都必須在報價單其他地方（條款方框、小標、徽章…）出現過。"""
+    h = _html(_q())
+    css = h[h.index("<style>"):h.index("</style>")]
+    rbox = [ln for ln in css.split("\n") if ln.strip().startswith(".rbox")]
+    other = "\n".join(ln for ln in css.split("\n") if not ln.strip().startswith(".rbox"))
+    other += h[h.index("</style>"):]                                  # 內嵌樣式（徽章等）
+    colors = set(re.findall(r"#[0-9A-Fa-f]{3,6}\b", "\n".join(rbox)))
+    assert colors, rbox
+    for c in colors:
+        assert c.lower() in other.lower() or c.lower() in h[h.index("</style>"):].lower(), (c, "報價單其他地方沒用過的顏色")
+    assert "border-radius:4px" in "".join(rbox)
+
+
+def test_adjusted_layout_neutralises_header_width_hints():
+    """欄寬調整時 <th style=width> 的預設提示作廢（否則品名欄 th 的 190px 會把剩餘寬度按比例攤給所有欄）。"""
+    h = _html(_rows(brand="SR-S-VMS-Mini2-516-AID04", name="主機"))
+    assert "table.items thead th{width:auto!important}" in h
