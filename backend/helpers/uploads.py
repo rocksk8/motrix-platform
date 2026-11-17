@@ -57,6 +57,7 @@ _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 #: `max_request_bytes`＝這一次請求的合計大小。
 UPLOAD_LIMITS_BY_SUBFOLDER = {
     'case_extra_expense': {'max_files': 10, 'max_request_bytes': 50 * 1024 * 1024},
+    'quotation_specs': {'max_files': 10, 'max_request_bytes': 50 * 1024 * 1024},      # 報價單規格 PDF（備註事項 B，2026-11-17）：10 檔／單檔 20MB（沿用 max_file_mb）／合計 50MB
 }
 _DEFAULT_MAX_FILE_SIZE = _MAX_FILE_SIZE
 

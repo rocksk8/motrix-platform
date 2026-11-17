@@ -21,7 +21,7 @@ _SQL = re.compile(r"UPDATE\s+quotations\b", re.I)
 #:    要替 helper 取別名請先來改這份掃描器。
 _HELPERS = ("append_json_list", "remove_json_item")
 #: 經 helper 寫 quotations 時，唯一允許的欄位與 extra_set 欄位
-_HELPER_OK_COLS = {"signed_files_json"}
+_HELPER_OK_COLS = {"signed_files_json", "spec_files_json"}      # spec_files_json：規格 PDF 附件清單（備註事項 B，2026-11-17；與回簽附件同為「附件清單、非本文」）
 _HELPER_OK_EXTRA = {"updated_at"}
 
 

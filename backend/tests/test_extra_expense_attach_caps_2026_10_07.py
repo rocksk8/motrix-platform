@@ -130,7 +130,7 @@ def test_other_folders_are_not_capped_by_this_table():
     """上限表只列 case_extra_expense：別的資料夾（例：報價單回簽）沒有數量上限，行為與之前相同。"""
     from fastapi import UploadFile
     from helpers import uploads as U
-    assert set(U.UPLOAD_LIMITS_BY_SUBFOLDER) == {"case_extra_expense"}
+    assert set(U.UPLOAD_LIMITS_BY_SUBFOLDER) == {"case_extra_expense", "quotation_specs"}      # quotation_specs：備註事項 B（2026-11-17）；quotations（回簽）仍無上限
     ups = [UploadFile(filename="s%d.pdf" % i, file=io.BytesIO(_pdf())) for i in range(12)]
     import tempfile
     old = U.UPLOADS_ROOT

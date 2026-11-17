@@ -73,6 +73,7 @@ FUNNEL_CALLS = {
     "modules/case/api/material_orders.py": 2,
     "modules/case/api/quotations.py": 24,      # S3b：approve 對帳後狀態被重算時用漏斗存（+1）；S4：review-edit 存檔（+1）
     "modules/case/api/settlement_api.py": 1,
+    "modules/case/api/quotation_specs.py": 1,      # 備註事項 B：刪規格檔時同步拿掉 data_json.mergeFiles 的 id（走漏斗、維持 updated_at）
 }
 
 # ── 指紋排除清單（提案 §H1 的 denylist；**未知鍵一律算內容**）─────────────────────────────────
@@ -283,7 +284,7 @@ def test_save_quotation_json_call_sites_are_pinned():
     assert _funnel_call_counts() == FUNNEL_CALLS, (
         "save_quotation_json 呼叫點變了：新增呼叫端走漏斗＝安全（S3 的寫後掛鉤會涵蓋），但請更新 FUNNEL_CALLS；"
         "若是想繞過它另寫 UPDATE，請改到 DIRECT_WRITES 登記並說明理由")
-    assert sum(FUNNEL_CALLS.values()) == 28
+    assert sum(FUNNEL_CALLS.values()) == 29
 
 
 def test_the_funnel_is_the_only_place_with_a_plain_data_json_update_in_quotations_module():
