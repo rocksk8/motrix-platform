@@ -190,6 +190,7 @@ def test_parse_junit_failures_counts_and_nodeids():
     assert counts == {"passed": 1, "failed": 1, "skipped": 1, "error": 1}
     assert [f["nodeid"] for f in fails] == ["tests/platform/test_precheck_2026_11_18.py::test_a", "tests/platform/test_precheck_2026_11_18.py::test_b"]
     assert fails[0]["message"] == "boom: 修這裡" and fails[1]["kind"] == "error"
+    assert fails[0]["detail"] == ["detail"] and fails[1]["detail"] == []
 
 
 def test_parse_junit_failures_garbage_is_none():

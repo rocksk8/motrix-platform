@@ -28,6 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 MAX_LINES = 20
+DETAIL_LINES = 6                    # 失敗訊息第一行之後最多帶幾行（守門的違規清單通常在這裡）
 _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 sys.path.insert(0, str(HERE))
 
@@ -76,8 +77,9 @@ def parse_junit_failures(xml_text, backend=None):
             kind = "error"
         if bad is not None:
             counts[kind] += 1
-            msg = (bad.get("message") or (bad.text or "")).strip().splitlines()
-            fails.append({"nodeid": _nodeid(backend, tc.get("classname"), tc.get("name")), "kind": kind, "message": msg[0] if msg else ""})
+            msg = [x for x in (bad.get("message") or (bad.text or "")).strip().splitlines() if x.strip()]
+            fails.append({"nodeid": _nodeid(backend, tc.get("classname"), tc.get("name")), "kind": kind, "message": msg[0] if msg else "",
+                          "detail": [x.strip() for x in msg[1:1 + DETAIL_LINES]]})
         elif tc.find("skipped") is not None:
             counts["skipped"] += 1
         else:

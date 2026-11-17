@@ -37,6 +37,7 @@ _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 #: 靜態旗標裡屬於「整合者在列車上處理」的代號（DEV-RULES-TOKEN 第 7 條：manifest 日期、version_slots、changelog、FORM_VERSION 台帳、
 #: UNIT-INDEX／test_map／dep_graph／A0 產生檔）。A1＝CHANGELOG 佔位格式、C1＝CHANGELOG 跟著程式、F1＝FORM_VERSION 台帳、A0＝產生檔過期；其餘是作者自己的改動造成的
 CLOSING_CODES = {"A0", "A1", "C1", "F1"}
+MAX_DETAIL = 6                      # 每項最多印幾行守門的違規明細
 MAX_SHOW = 30                       # 每類最多印幾項（其餘用 --json-out 看）
 DEFAULT_BUDGET_SEC = 180            # 牆鐘上限（目標 120 秒；多給一點避免冷機誤殺，仍算未完成）
 sys.path.insert(0, str(HERE))
@@ -128,6 +129,8 @@ def build_report(ctx):
             L.append("  %d. %s" % (i, x["where"]))
             if x.get("msg"):
                 L.append("     %s" % x["msg"][:220])
+            for d in x.get("detail", [])[:MAX_DETAIL]:
+                L.append("       · %s" % d[:200])
             if x.get("fix"):
                 L.append("     修法：%s" % x["fix"])
         if len(items) > MAX_SHOW:
@@ -278,7 +281,8 @@ def run(repo=REPO, base=None, static_only=False, workers=2, window="precheck", b
                 for g in r["cfg"]["groups"]:
                     if g["id"] == gid:
                         fix = g.get("fix", "")
-            item = {"where": "[測試] %s" % f["nodeid"], "msg": ("%s　%s" % (why, f["message"])).strip("　 ") if why else f["message"], "fix": fix}
+            item = {"where": "[測試] %s" % f["nodeid"], "msg": ("%s　%s" % (why, f["message"])).strip("　 ") if why else f["message"], "fix": fix,
+                    "detail": f.get("detail", [])}
             (closing if cls == "closing" else author).append(item)
         c = r["counts"] or {"passed": 0, "failed": 0, "skipped": 0, "error": 0}
         tests = {"files": len(r["targets"]), "passed": c["passed"], "failed": c["failed"] + c["error"], "skipped": c["skipped"]}
