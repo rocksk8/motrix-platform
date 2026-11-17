@@ -4,6 +4,7 @@
 - 文字範本取單上快照 `altTexts`（存檔時記下；沒有快照的舊單才回頭讀目前設定）；代入一律用 `re.sub` 單趟取代，**不用 `str.format`**
   （組名是使用者輸入，不能讓它含的大括號被當成範本）；輸出端（PDF／Excel）必須自行跳脫。"""
 import itertools
+import logging
 import re
 
 from modules.case import alt_policy
@@ -12,7 +13,8 @@ from modules.case import profit_guard as PG
 TAG_PICKED = "擇一"          # 本班固定一種客戶版標記（PLAN §7 Q7：下班再框架化）
 TAG_UNPICKED = "未選"
 _PLACEHOLDER = re.compile(r"\{(items|group)\}")
-PLAN_HINT = "請擇一方案，回簽時勾選"       # 方案表標題下的說明（接在設定中心 total_text 後面）
+logger = logging.getLogger(__name__)
+PLAN_HINT ="請擇一方案，回簽時勾選"       # 方案表標題下的說明（接在設定中心 total_text 後面）
 _CN_NUM = "一二三四五六七八九十"
 _NAME_MAX = 16                              # 方案名稱裡每個品名最多幾個字
 _COMBO_FALLBACK = 24                        # 設定 combo_view_max 讀不到時的後備（＝設定預設）
@@ -96,7 +98,9 @@ def plans(q: dict, groups: dict, picks: dict, numbers: dict) -> dict:
     if count <= _combo_limit():
         rows = []
         for n, combo in enumerate(itertools.product(*[groups[g] for g in unpicked]), 1):
-            p = dict(base, **{g: str(m.get("id")) for g, m in zip(unpicked, combo)})
+            p = dict(base)                          # 守門禁用 `**` 傳參數：逐組明列
+            for g, m in zip(unpicked, combo):
+                p[g] = str(m.get("id"))
             t = PG.server_totals(dict(q, altPicks=p), stored)
             nums = "＋".join(str(numbers[str(m.get("id"))]) for m in combo if str(m.get("id")) in numbers)
             names = "＋".join(x for x in (_short_name(m) for m in combo) if x)
@@ -108,6 +112,15 @@ def plans(q: dict, groups: dict, picks: dict, numbers: dict) -> dict:
             {"group": g, "options": [{"number": numbers.get(str(m.get("id"))), "name": _short_name(m), "amount": PG.item_amount(m)}
                                      for m in groups[g]]} for g in unpicked])
     return out
+
+
+def _safe_plans(q: dict, groups: dict, picks: dict, numbers: dict):
+    """各方案金額算不出來（資料怪、設定讀取出錯…）不能讓整份 PDF／預覽壞掉：記一筆 log、回 None ⇒ pdf_gen 退回原合計框。"""
+    try:
+        return plans(q, groups, picks, numbers)
+    except Exception:
+        logger.exception("alt_view.plans failed; falling back to the plain totals box")
+        return None
 
 
 def view(q: dict) -> dict:
@@ -150,4 +163,4 @@ def view(q: dict) -> dict:
     return {"has_alt": True, "rows": rows, "numbers": numbers, "notes": notes,
             "total_text": texts["total_text"] if unpicked else None,
             "unpicked_groups": len(unpicked),
-            "plans": plans(q, groups, picks, numbers) if unpicked else None}
+            "plans": _safe_plans(q, groups, picks, numbers) if unpicked else None}

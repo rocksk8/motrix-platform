@@ -23,6 +23,9 @@
 - 修正（h21 審查）：簽核佇列詳情（`detail_quotation`）的「總金額」`format(r["total"] or 0, ",.0f")` 在 total 是文字時會 ValueError ⇒ 簽核頁打不開，改用 `money_num`；權責認列旗標清單（`recognition_flags`）的金額沒有值（NULL／壞值）仍輸出 `null`（用 `money_num(x, None)`），不變成 0。
 - 待辦（下一班統一掃）：同類殘留 `r["total"] or 0` 只做輸出、不會 500 的地方（analytics/api/dashboard.py、arap/api/cashier.py、列表端點）仍會輸出文字金額，之後一併處理。
 - 待辦（下次升核心版時）：把 `tax_calc._parse_money` 公開成 L1 函式，arap／case／analytics 三份收斂到它，刪除 `modules/arap/money_num.py`、`modules/case/money_num.py`。
+- **（併入）(next) — 2026-11-17（feat/quote-alt-plan-totals；T88 擇一方案未選完時列各方案金額；版號由列車取）**
+- 行為變更（有意，使用者 2026-11-17 裁示）：擇一方案的單還有未選定的組、且「合計依方案選擇」有勾時，客戶版 PDF／預覽／內部列印的「合計」區由原合計框改為「各方案金額」小表（方案／品項小計／［稅前合計］／營業稅／總計；有共同品項時註明「各方案皆含共同品項 NT$ X」）；兩組以上列各種搭配（≤ `combo_view_max`，超過改分組列各選項金額）。客戶選定後、總開關沒開、沒有擇一品項的單，輸出逐位元不變。API、資料欄位、權限語意不變。
+- 內部：`alt_view.view()` 回傳多一個 `plans` 鍵（客戶版，只用 `server_totals`／`item_amount`，不含成本毛利；算不出來時為 None，`pdf_gen` 退回原合計框）；`pdf_gen` 合計區新增 `_alt_plans_html`。舊測試兩支有意改寫，見 `docs/quick/changelog.md` 2026-11-17 T88。
 
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。

@@ -259,3 +259,22 @@ def test_plan_table_html_has_no_unbalanced_tags():
     b = _body(_html(_two_groups(freight=100)))
     assert len(re.findall(r"<table", b)) == len(re.findall(r"</table>", b))
     assert len(re.findall(r"<tr", b)) == len(re.findall(r"</tr>", b))
+
+
+def test_plans_failure_does_not_break_view_or_pdf_and_falls_back_to_old_box(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("算不出來")
+    monkeypatch.setattr(alt_view, "plans", boom)
+    q = _one_group()
+    v = alt_view.view(q)
+    assert v["has_alt"] is True and v["plans"] is None and v["total_text"] == "依方案選擇"
+    b = _body(_html(q))
+    assert '<div class="totals">' in b and b.count("依方案選擇") == 2 and "請擇一方案" not in b
+
+
+def test_alt_view_has_no_double_star_call_arguments():
+    import ast
+    import pathlib
+    tree = ast.parse(pathlib.Path(alt_view.__file__).read_text(encoding="utf-8"))
+    bad = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Call) and any(k.arg is None for k in n.keywords)]
+    assert bad == [], "守門（test_case_summary_purpose）禁止 ** 傳參數：%s" % bad
