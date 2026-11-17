@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-17（fix/quote-relock-saves；報價單解鎖編輯「重新鎖定」改為先儲存再鎖定；版號由列車取）
+- 修正（前端；後端、API、權限不變）：`quotation-form.html` 解鎖編輯中按「重新鎖定」，有未儲存的修改時改走與「儲存修改」相同的 `saveDraft()`（同樣的驗證、稽核、通知），成功後才鎖回去；失敗時維持解鎖、保留畫面上的修改並顯示原因。原本「重新鎖定」會直接放棄修改。`saveDraft()` 回傳成功／失敗並防重入（連按只存一次、不重複通知）。
+- 介面：解鎖橫幅的「取消解鎖」改為「放棄修改」（有未儲存的修改時先確認，確認後載回伺服器版並鎖定）；解鎖或非草稿單不再顯示「儲存草稿」「草稿已儲存」字樣。表單版號 V3.50→V3.51。
+- 測試：`tests/test_e2e_superadmin_approver_edit_entry_2026_11_13.py`（重新鎖定先存、無修改不送、存檔失敗保持解鎖、放棄修改、連按一次、無草稿字樣）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（複查編輯放棄修改）、`tests/test_form_version_bumped_2026_09_24.py`（V3.51 登記）。
+
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 - 修正（只影響自訂報表選項，旗標後；h11 審查）：`report_source` 的狀態／成交標記／精算狀態選項改為只列呼叫者看得到的列的值、只讀實體欄位（不碰 `data_json`）、每人快取 60 秒；沒有使用者回空。
