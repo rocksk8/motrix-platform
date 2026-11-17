@@ -81,6 +81,9 @@ _FAIL_REASON_LABELS = {
     # 2026-11-14 T86 U1：報價單整份存檔（PUT）被擋的細分原因（端點在回應標頭 X-Fail-Reason 帶碼，main.py 記進 reason_code；不含個資）
     "status_locked": "單據狀態已鎖定（需解鎖或走正式流程）", "rejected_locked": "已駁回結案，不可修改",
     "finance_view": "沒有財務檢視權限", "unlock_superadmin": "解鎖編輯需最高管理者",
+    # 2026-11-17 精算存檔 409 誤報調查：精算 PUT 的三種 409 原本都只記成 conflict，稽核看不出是哪一種
+    "stale_version": "版本過期（樂觀鎖：資料在您載入後被更新過）", "finalize_mismatch": "完結前重算與畫面不一致",
+    "not_won": "尚未成案，不能完結精算",
 }
 #: 登入失敗稽核列的來源 ⇒ reason_code（密碼維持歷史值 login_failed，既有查詢與報表不變）
 LOGIN_FAIL_REASONS = {"password": "login_failed", "totp": "totp_failed", "qr": "qr_failed", "passkey": "passkey_failed"}
