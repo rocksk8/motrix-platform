@@ -186,7 +186,6 @@
   "backend/tests/test_e2e_quote_list_t84_2026_11_13.py": 2,
   "backend/tests/test_e2e_quote_save_export_u1u2_2026_11_14.py": 1,
   "backend/tests/test_e2e_quote_submit_clarity_2026_11_11.py": 1,
-  "backend/tests/test_e2e_superadmin_approver_edit_entry_2026_11_13.py": 1,
   "backend/tests/test_e2e_system_rail_fixed_t72.py": 3,
   "backend/tests/test_e2e_ux_onboarding_2026_11_11.py": 1,
   "backend/tests/test_edge_profile_2026_09_25.py": 1,

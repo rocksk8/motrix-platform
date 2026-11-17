@@ -31456,12 +31456,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "core:pdf_gen"
+    "core:pdf_gen",
+    "file:backend/tests/test_closing_report_amounts_2026_11_17.py"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/test_closing_report_amounts_2026_11_17.py"
     ]
    }
   },

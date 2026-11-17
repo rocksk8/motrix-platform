@@ -327,8 +327,9 @@ def test_review_edit_discard_button_asks_first_and_returns_to_the_server_version
     page.fill(QTY, "88")
     page.once("dialog", lambda d: d.dismiss())
     page.click('[data-testid="review-edit-cancel"]')
-    page.wait_for_timeout(500)
-    assert page.is_visible('[data-testid="review-edit-bar"]') and page.input_value(QTY) == "88", "取消確認：仍在編輯、修改還在"
+    page.wait_for_selector('[data-testid="review-edit-bar"]', state="visible", timeout=5000)
+    page.wait_for_function("(q) => document.querySelector(q).value === '88'", arg=QTY, timeout=5000)
+    assert page.input_value(QTY) == "88", "取消確認：仍在編輯、修改還在"
     page.once("dialog", lambda d: d.accept())
     page.click('[data-testid="review-edit-cancel"]')
     page.wait_for_function("(b) => document.querySelector('.qty-input').readOnly && document.querySelector('.qty-input').value === b", arg=before, timeout=10000)   # 先鎖定、再載回伺服器版（非同步）

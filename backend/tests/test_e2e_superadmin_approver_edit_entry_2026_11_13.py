@@ -274,8 +274,9 @@ def test_discard_button_asks_first_then_returns_to_the_server_version(live_serve
     page.fill(QTY, "37")
     page.once("dialog", lambda d: d.dismiss())
     page.click('[data-testid="qf-discard-unlock-edit"]')
-    page.wait_for_timeout(500)
-    assert page.is_visible('[data-testid="qf-unlocked-banner"]') and page.input_value(QTY) == "37"
+    page.wait_for_selector('[data-testid="qf-unlocked-banner"]', state="visible", timeout=5000)      # 取消確認：橫幅還在
+    page.wait_for_function("(q) => document.querySelector(q).value === '37'", arg=QTY, timeout=5000)   # 修改還在
+    assert page.input_value(QTY) == "37"
     page.once("dialog", lambda d: d.accept())
     page.click('[data-testid="qf-discard-unlock-edit"]')
     page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=10000)
@@ -305,12 +306,25 @@ def test_no_draft_wording_while_unlocked_and_double_click_relock_saves_once(live
     assert len(puts) == 1 and _server_qty() == 52, puts
 
 
+def _method_body(html, name):
+    """頁面 Alpine 方法 `[async ]name(...) {` 的本體（大括號配對；不靠縮排字串當錨點）。"""
+    import re
+    m = re.search(r"(?m)^\s*(?:async\s+)?" + re.escape(name) + r"\s*\([^)]*\)\s*\{", html)
+    assert m, "找不到方法 " + name
+    depth, j = 0, m.end() - 1
+    while j < len(html):
+        depth += (html[j] == "{") - (html[j] == "}")
+        if depth == 0:
+            return html[m.end():j]
+        j += 1
+    raise AssertionError("大括號沒配對：" + name)
+
+
 def test_unlock_banner_has_no_ambiguous_cancel_button_and_relock_goes_through_savedraft():
     from core import source_tree
     html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     assert "取消解鎖" not in html
-    i = html.index("      async cancelUnlock() {")
-    body = html[i:html.index("      async discardUnlockEdit()", i)]
+    body = _method_body(html, "cancelUnlock")
     assert "await this.saveDraft()" in body and "apiSave" not in body and "unlocked = false" not in body, "重新鎖定必須走 saveDraft，且不得先把 unlocked 設成 false"
 
 
@@ -318,5 +332,4 @@ def test_autosave_does_not_run_while_unlocked():
     """h9 L1：解鎖編輯一律手動儲存（自動存檔的 PUT 不帶 _isUnlockEdit，待審核／已送出都會被 403）。"""
     from core import source_tree
     html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
-    i = html.index("      autoSave() {")
-    assert "if (this.unlocked) return" in html[i:i + 400]
+    assert "if (this.unlocked) return" in _method_body(html, "autoSave")[:400]
