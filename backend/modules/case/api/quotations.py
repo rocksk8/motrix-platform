@@ -84,6 +84,7 @@ from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_f
 from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 from helpers import clause_titles as _CT      # S-Q2：條款標題凍結（伺服器自有欄位 clauseTitles；用戶端送的一律丟掉）
+from helpers import quote_brand_label as _BL  # 品項表「廠牌 / 型號」欄名可自訂（清理＋送簽註記）
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
     money_visible, material_money_visible, quote_money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record, strip_history_reasons,
@@ -143,6 +144,8 @@ _TRACKED_QUOTE_FIELDS = [
     ("tot.netMarginPct",  "營業利益率"),   # 第 48 班改名（舊紀錄存的是「淨利率」；financial_mask.HISTORY_MONEY_FIELDS 新舊並列）
     ("overheadPct",       "管銷分攤比率"),
     ("notes",             "備註"),
+    ("columnLabels.item",  "欄名（品名 / 規格說明）"),   # 沒有＝預設名稱；改了在編輯紀錄看得到
+    ("columnLabels.brand", "欄名（廠牌 / 型號）"),
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
     ("contract.contactPerson",   "聯絡人"),
@@ -1981,7 +1984,7 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
     modules/case/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
     不能由送件人決定（原本直接打 API 不帶 reasons 就能讓簽核人看不到低毛利）。"""
-    from modules.case.quote_terms import DEFAULT_TERMS, submit_reasons
+    from modules.case.quote_terms import DEFAULT_TERMS, submit_reasons, _NO_REASON as _NO_REASON_TEXT
     from helpers.settings import _get_setting
     from helpers import clause_titles as _CT
     _CT.freeze(q)                                                  # S-Q2：送審當下把條款標題凍結進單據（範本生效時）；沒生效 ⇒ 清掉舊的凍結值。要在算原因之前。
@@ -1993,8 +1996,12 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     default_pt = _get_setting(k_pay, DEFAULT_TERMS["paymentTerms"]) or ""
     appr = q.get("approval") if isinstance(q.get("approval"), dict) else {}
     q["approval"] = appr
-    appr["reasons"] = submit_reasons(q, user.get("display_name") or user["username"],
-                                     presets, default_pt)
+    reasons = submit_reasons(q, user.get("display_name") or user["username"],
+                             presets, default_pt)
+    _bl_notes = _BL.change_reasons(q)                              # 品項表欄名被改過 ⇒ 簽核人要看得到（兩欄各一行；沒改＝不動原有行為）
+    if _bl_notes:
+        reasons = [r for r in reasons if r != _NO_REASON_TEXT] + _bl_notes   # 有特殊條件就不再寫「標準報價單送出」
+    appr["reasons"] = reasons
 
 
 def _quote_custom_fields_gate(q: dict, old):
@@ -2038,6 +2045,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
+    q["docType"] = _DT.norm(q.get("docType"))    # 先定類型：欄名清理與送簽註記要看它（下面開立時同一個值）
+    _BL.sanitize(q)                              # 品項欄名：去控制字元、截長、與預設相同＝移除；估價單一律不收
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -2544,7 +2553,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
     try:
-        _oh_row = _oh_conn.execute("SELECT deal_tag, settle_status, data_json, updated_at FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        _oh_row = _oh_conn.execute("SELECT deal_tag, settle_status, data_json, updated_at, doc_type FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     finally:
         _oh_conn.close()
     # 第 52 班：樂觀鎖檢查要排在 prepare() 之前——最高管理者剛在精算頁改過比率（會更新 updated_at）時，開著舊表單的非最高管理者儲存，
@@ -2555,6 +2564,9 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 伺服器自有欄位不採用用戶端的值：單號以網址為準；編輯紀錄先丟掉用戶端的，
     # 寫入交易內讀到 existing 後再放回資料庫現值（避免沒帶 _expectedUpdatedAt 時蓋掉併發的伺服器追加）。
     q["quoteNo"] = quote_no
+    if _oh_row:
+        q["docType"] = _DT.norm(_oh_row["doc_type"])      # 單據類型以資料庫現值為準（之後同一規則）；欄名清理與送簽註記要先知道類型
+    _BL.sanitize(q)                                       # 品項欄名：去控制字元、截長、與預設相同＝移除；估價單一律不收
     q.pop("editHistory", None)
     q.pop("clauseTitles", None)          # S-Q2：用戶端送的凍結值一律不採用；下面在寫入交易內依狀態轉換決定（凍結／沿用資料庫現值／清掉）
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
@@ -2604,7 +2616,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             "editedBy":           editor["username"],
             "editedByDisplay":    editor["display_name"] or editor["username"],
             "status":             "pending",
-            "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"],
+            "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"] + _BL.change_reasons(q),
         }
 
     # R2（營業稅法 §7、§8）：零稅率／免稅送出（非草稿）要有依據；應稅單移除殘留依據

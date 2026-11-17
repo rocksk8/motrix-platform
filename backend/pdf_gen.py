@@ -30,6 +30,7 @@ from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
 from helpers import pdf_scripts as _PS
 from helpers import doc_type as _DT              # 估價單：標題與浮水印用語依單據類型（版型沿用報價單）
+from helpers import quote_brand_label as _BL     # 品項表「廠牌 / 型號」欄名可自訂（報價單；沒自訂＝預設，輸出不變）
 from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
@@ -557,8 +558,8 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '  <thead>\n'
         '    <tr>\n'
         '      <th style="width:28px">#</th>\n'
-        '      <th style="width:190px">品名 / 規格說明</th>\n'
-        '      <th style="width:110px">廠牌 / 型號</th>\n'
+        f'      <th style="width:190px">{esc(_BL.label_of(q, "item"))}</th>\n'
+        f'      <th style="width:110px">{esc(_BL.label_of(q, "brand"))}</th>\n'
         '      <th class="r" style="width:48px">數量</th>\n'
         '      <th style="width:70px">單位</th>\n'
         + ('      <th class="r cost-cell" style="width:100px">單位成本</th>\n'
