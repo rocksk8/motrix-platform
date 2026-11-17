@@ -2230,6 +2230,42 @@
           <span>套用範本後可再修改，不會與範本連動；之後改範本也不會動到已開出的單。</span>
           <span data-testid="qf-extra-notes-count" x-text="(q.extraNotes || '').length + ' / 20000 字'"></span>
         </div>
+
+        <!-- 併入輸出的規格文件（2026-11-17）：規格 PDF 接在報價單後面合成同一份 PDF；勾選的才併入、順序＝合併順序 -->
+        <div style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--border-light)" data-testid="qf-spec-panel">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">併入輸出的規格文件（PDF）</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.7">
+            勾選的規格 PDF 會接在報價單（含備註頁）之後，合成同一份 PDF 輸出。最多 10 個檔、單檔與總量有上限；加密或損毀的檔會在輸出時略過並提示，不影響報價單本身。
+            「複製為新報價單」只複製備註文字，不複製規格檔。
+          </div>
+          <div x-show="isNewRecord" data-testid="qf-spec-needsave" style="font-size:11px;color:#92400E;background:#FEF3C7;border-radius:6px;padding:6px 10px">
+            請先存成草稿，取得單號後才能上傳規格文件。
+          </div>
+          <div x-show="!isNewRecord">
+            <template x-for="(f, idx) in specRows" :key="f.id">
+              <div data-testid="qf-spec-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;background:#fff">
+                <input type="checkbox" data-testid="qf-spec-check" :checked="specSelected(f.id)" @change="toggleSpec(f.id)" :disabled="isStatusLocked()">
+                <span data-testid="qf-spec-order" x-show="specSelected(f.id)" style="font-size:11px;font-weight:700;min-width:20px" x-text="(q.mergeFiles || []).indexOf(f.id) + 1 + '.'"></span>
+                <a href="javascript:void(0)" @click="previewSpec(f)" style="color:var(--accent);text-decoration:underline;font-size:12px" x-text="f.name"></a>
+                <span style="font-size:11px;color:var(--text-dim)" x-text="specMeta(f)"></span>
+                <span x-show="f.status && f.status !== 'ok'" data-testid="qf-spec-warn"
+                      style="font-size:11px;color:#B91C1C;background:#FEE2E2;border-radius:4px;padding:1px 6px" x-text="specWarn(f)"></span>
+                <span style="margin-left:auto;display:flex;gap:4px">
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-up" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === 0" @click="moveSpec(f.id, -1)">↑</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-down" x-show="specSelected(f.id)" :disabled="isStatusLocked() || (q.mergeFiles || []).indexOf(f.id) === (q.mergeFiles || []).length - 1" @click="moveSpec(f.id, 1)">↓</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="qf-spec-delete" style="color:#B91C1C" :disabled="isStatusLocked()" @click="deleteSpecFile(f)">刪除</button>
+                </span>
+              </div>
+            </template>
+            <div x-show="!specFiles.length" style="font-size:11px;color:var(--text-dim);padding:4px 0">尚無規格文件。</div>
+            <label data-testid="qf-spec-upload" style="display:inline-block;margin-top:4px;padding:5px 12px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer"
+                   :style="(isStatusLocked() || specUploading) ? 'opacity:.5;pointer-events:none' : ''">
+              <span x-text="specUploading ? '上傳中…' : '＋ 上傳規格 PDF'"></span>
+              <input type="file" multiple accept=".pdf,application/pdf" style="display:none" data-testid="qf-spec-input" @change="uploadSpecFiles($event)">
+            </label>
+            <span style="font-size:11px;color:var(--text-dim);margin-left:8px" x-text="specFiles.length + ' / 10 個'"></span>
+          </div>
+        </div>
       </div>
 
     </div><!-- /form-left -->
@@ -2995,6 +3031,7 @@
         warrantyTerms: DEFAULT_TERMS.warrantyTerms,
         afterSales: DEFAULT_TERMS.afterSales,
         extraNotes: '',                      // 備註事項（2026-11-17）：空字串 ⇒ 伺服器不存這個鍵、PDF 不多一頁
+        mergeFiles: [],                      // 併入輸出的規格文件 id（有序；空 ⇒ 伺服器丟鍵）。檔案清單在 specFiles（不進 q）
 
         indirectLogistics: 0, indirectInstallation: 0,
         indirectTravel: 0,   indirectWarranty: 0, indirectOther: 0,
@@ -3033,6 +3070,8 @@
       _notesTplLoadFailed: false,
       notesTplOpen: false, notesTplQ: '', notesTplCat: '', notesTplPending: null,
       notesMgrOpen: false, notesTplDraft: [], notesMgrQ: '', notesTplSaving: false,
+      // ── 規格文件（2026-11-17）：清單來自單筆 GET 的頂層 specFiles（不放進 q，避免被整份存檔送回去）──
+      specFiles: [], specUploading: false,
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
@@ -3919,6 +3958,88 @@
         }
       },
 
+      // ── 併入輸出的規格文件（2026-11-17）：後端端點由 quotation_specs 提供；這裡只負責清單、勾選與排序 ──
+      get specRows() {
+        // 已勾選的（依合併順序）排前面，沒勾的接在後面（維持上傳順序）
+        const sel = this.q.mergeFiles || []
+        const byId = new Map(this.specFiles.map(f => [f.id, f]))
+        return [...sel.map(id => byId.get(id)).filter(Boolean), ...this.specFiles.filter(f => !sel.includes(f.id))]
+      },
+      specSelected(id) { return (this.q.mergeFiles || []).includes(id) },
+      specMeta(f) {
+        const kb = f.size ? (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB') : ''
+        return [f.pages ? f.pages + ' 頁' : '', kb].filter(Boolean).join('・')
+      },
+      specWarn(f) {
+        return ({ encrypted: '已加密：輸出時會略過', broken: '檔案損毀：輸出時會略過', empty: '沒有頁面：輸出時會略過' })[f.status] || ''
+      },
+      toggleSpec(id) {
+        const sel = [...(this.q.mergeFiles || [])]
+        const i = sel.indexOf(id)
+        if (i >= 0) sel.splice(i, 1)
+        else {
+          const f = this.specFiles.find(x => x.id === id)
+          if (f && f.status && f.status !== 'ok' && !confirm(`「${f.name}」${this.specWarn(f)}。仍要勾選嗎？`)) { this.q.mergeFiles = [...(this.q.mergeFiles || [])]; return }
+          sel.push(id)
+        }
+        this.q.mergeFiles = sel
+        this.setDirty()
+      },
+      moveSpec(id, dir) {
+        const sel = [...(this.q.mergeFiles || [])]
+        const i = sel.indexOf(id), j = i + dir
+        if (i < 0 || j < 0 || j >= sel.length) return
+        ;[sel[i], sel[j]] = [sel[j], sel[i]]
+        this.q.mergeFiles = sel
+        this.setDirty()
+      },
+      async uploadSpecFiles(evt) {
+        const files = evt?.target?.files
+        if (!files || !files.length || !this.q.quoteNo || this.isNewRecord) return
+        const bad = [...files].find(f => !/\.pdf$/i.test(f.name))
+        if (bad) { alert(`「${bad.name}」不是 PDF；規格文件只收 PDF`); evt.target.value = ''; return }
+        const fd = new FormData()
+        for (const f of files) fd.append('files', f)
+        this.specUploading = true
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files`, {
+            method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { alert(d.detail || '上傳失敗'); return }
+          this.specFiles = d.specFiles || this.specFiles
+          if ((d.rejected || []).length) alert('以下檔案未收：\n' + d.rejected.map(x => `・${x.name}：${x.reason}`).join('\n'))
+          else this.toast(`已上傳 ${files.length} 個規格文件（要併入輸出請勾選）`)
+          this._refreshUpdatedAt && this._refreshUpdatedAt()
+        } catch (e) { alert('上傳失敗：' + e.message) }
+        finally { this.specUploading = false; evt.target.value = '' }
+      },
+      async deleteSpecFile(f) {
+        if (!confirm(`確定刪除規格文件「${f.name}」？${this.specSelected(f.id) ? '\n它目前是勾選併入的，刪除後輸出就不再包含它。' : ''}`)) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/spec-files/${encodeURIComponent(f.id)}`, {
+            method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) { alert(d.detail || '刪除失敗'); return }
+          this.specFiles = d.specFiles || this.specFiles.filter(x => x.id !== f.id)
+          this.q.mergeFiles = (this.q.mergeFiles || []).filter(id => id !== f.id)   // 伺服器同交易已移除；本機未存的勾選保留其餘
+          this._refreshUpdatedAt && this._refreshUpdatedAt()     // 伺服器改了單據內容：換樂觀鎖基準，避免下次存檔 409
+        } catch (e) { alert('刪除失敗：' + e.message) }
+      },
+      async previewSpec(f) {
+        try { await MotrixFilePreview.openFile({ path: f.path, filename: f.name, name: f.name, mime: 'application/pdf' }) }
+        catch (e) { alert('開啟檔案失敗：' + e.message) }
+      },
+      // 下載回應若帶 X-Pdf-Merge-Skipped（URL-encode 的 JSON）＝有規格文件沒併進去：明講哪個檔、為什麼
+      _toastMergeSkipped(r) {
+        const raw = r && r.headers && r.headers.get('X-Pdf-Merge-Skipped')
+        if (!raw) return
+        try {
+          const why = { encrypted: '已加密', broken: '檔案損毀', empty: '沒有頁面', missing: '檔案已不存在', over_pages: '超過頁數上限', over_size: '超過大小上限' }
+          const list = JSON.parse(decodeURIComponent(raw))
+          if (list.length) alert(`PDF 已輸出，但有 ${list.length} 個規格文件沒有併入：\n` + list.map(x => `・${x.name}（${why[x.reason] || x.reason}）`).join('\n'))
+        } catch {}
+      },
+
       // ── 備註事項範本（2026-11-17）──────────────────────────────────────
       async loadNotesTemplates() {
         try {
@@ -4110,7 +4231,7 @@
           contactPhone: ['qcustomer', '電話 / 分機'], contactEmail: ['qcustomer', 'E-mail'], deliveryAddress: ['qcustomer', '送貨地址 / 發票地址'],
           deliveryLocation: ['qproject', '交貨地點'], validDays: ['qbasic', '有效天數'], salesPerson: ['qbasic', '報價人'], locationId: ['qbasic', '開立據點'],
           paymentTerms: ['qterms', '付款條件'], deliveryTerms: ['qterms', '交貨條件'], acceptanceTerms: ['qterms', '驗收標準'],
-          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL], extraNotes: ['qterms', '備註事項'] }
+          warrantyTerms: ['qterms', '保固條件'], afterSales: ['qterms', AFTERSALES_LABEL], extraNotes: ['qterms', '備註事項'], mergeFiles: ['qterms', '併入輸出的規格文件'] }
         const mineNow = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
         const base = this._qBase || {}
         const changed = Object.keys(mineNow).filter(k => !SKIP.includes(k) && JSON.stringify(mineNow[k]) !== JSON.stringify(base[k]))
@@ -4447,6 +4568,7 @@
             this.toast(msg); return
           }
           const blob = await r.blob()
+          this._toastMergeSkipped(r)
           const url  = URL.createObjectURL(blob)
           const a    = document.createElement('a')
           a.href     = url
@@ -4510,6 +4632,7 @@
             this.toast(msg); return
           }
           const blob = await r.blob()
+          this._toastMergeSkipped(r)
           this._pdfCache = { key: _pk, blob }
           this._saveBlobAs(blob, `${this.q.quoteNo}.pdf`)
           this.toast('PDF 已下載完成（檔名 ' + this.q.quoteNo + '.pdf，在瀏覽器的「下載」）')
@@ -5039,6 +5162,7 @@
         this.q.signedAt = row.signed_at || ''
         this.q.signedLog = row.signed_log || []
         this.q.signedFiles = row.signed_files || []
+        this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
         // Ensure all items have a unique id (old quotes may lack id field)
         if (Array.isArray(this.q.items)) {
           this.q.items.forEach(it => { if (!it.id) it.id = this.genId() })
@@ -5246,6 +5370,7 @@
           settlement: null,
           editHistory: [],
           overheadPct: null,                     // 第 48 班（Q8）：複製為新單用全域預設比率，不繼承來源單的特例
+          mergeFiles: undefined,                 // 備註文字照複製；規格檔屬於來源單，不複製檔案也不帶勾選（2026-11-17）
         }
         template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
@@ -5696,6 +5821,7 @@
               this.q.signedAt = row.signed_at || ''
               this.q.signedLog = row.signed_log || []
               this.q.signedFiles = row.signed_files || []
+              this.specFiles = Array.isArray(row.specFiles) ? row.specFiles : []
               this.salesEmailSource = ''      // 既有報價單：業務員資料照存檔的快照，不顯示「尚未設定公司信箱」提醒
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']

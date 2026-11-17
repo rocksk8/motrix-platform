@@ -334,3 +334,75 @@ def test_template_change_rows():
     labels = [r[0] for r in S._quote_notes_templates_change_rows(old, new)]
     assert labels == ["報價備註範本／新增", "報價備註範本／刪除", "報價備註範本／改名", "報價備註範本／分類", "報價備註範本／內容修改"], labels
     assert S._quote_notes_templates_change_rows(old, old) == []
+
+
+# ── 5. B 段（規格文件併入）：變更註記／簽核佇列／複製 ─────────────────────────
+
+def test_change_summary_merge_files_counts_and_order():
+    from modules.case.api import quotations as Q
+    f = Q._summarize_quote_changes
+    assert f({}, {"mergeFiles": ["a", "b"]}) == [{"field": "併入輸出的規格文件", "from": "0 個檔", "to": "2 個檔"}]
+    assert f({"mergeFiles": ["a"]}, {}) == [{"field": "併入輸出的規格文件", "from": "1 個檔", "to": "0 個檔"}]
+    ch = f({"mergeFiles": ["a", "b"]}, {"mergeFiles": ["b", "a"]})
+    assert ch == [{"field": "併入輸出的規格文件", "from": "2 個檔", "to": "2 個檔（內容或順序已變更）"}], "個數相同但順序變了不能顯示成沒變"
+    assert f({"mergeFiles": ["a"]}, {"mergeFiles": ["a"]}) == []
+    assert f({"mergeFiles": []}, {}) == [] and f({}, {"mergeFiles": []}) == [], "空陣列與缺鍵同義，不算「其他內容」變更"
+
+
+def _ensure_spec_col():
+    import db
+    c = db.get_db()
+    try:
+        cols = [r[1] for r in c.execute("PRAGMA table_info(quotations)").fetchall()]
+        if "spec_files_json" not in cols:
+            c.execute("ALTER TABLE quotations ADD COLUMN spec_files_json TEXT NOT NULL DEFAULT '[]'")
+            c.commit()
+    finally:
+        c.close()
+
+
+def test_approver_detail_lists_merged_spec_files_in_order(client, make_user):
+    import db
+    _ensure_spec_col()
+    no = "MQ-XN-SPEC"
+    specs = [{"id": "s1", "name": "規格甲.pdf", "path": "quotation_specs/x/s1.pdf", "size": 10},
+             {"id": "s2", "name": "規格乙.pdf", "path": "quotation_specs/x/s2.pdf", "size": 10}]
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, spec_files_json)"
+                  " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                  (no, "待審核", "客", "案", 0, 0, json.dumps({"mergeFiles": ["s2", "gone", "s1"]}),
+                   "2026-11-17T00:00:00", "2026-11-17T00:00:00", json.dumps(specs, ensure_ascii=False)))
+        c.commit()
+    finally:
+        c.close()
+    u, pw = make_user(username="xn_appr_spec", role="superadmin")
+    j = client.get("/api/approval-queue/detail?type=quotation&id=" + no, headers=_login(client, u, pw)).json()
+    row = [f for f in j["fields"] if f["label"].startswith("併入輸出的規格文件")][0]
+    assert row["value"].split("\n") == ["1. 規格乙.pdf", "2. （檔案已不存在）", "3. 規格甲.pdf"], "依合併順序；已刪的檔明講不存在"
+    names = [f["name"] for f in j["files"]]
+    assert names == ["【規格文件】規格乙.pdf", "【規格文件】規格甲.pdf"], names
+
+
+def test_approver_detail_without_spec_column_data_is_safe(client, make_user):
+    """mergeFiles 有值但沒有對應檔案資料（舊庫／功能未啟用）：只列順序、不擋簽核詳情。"""
+    import db
+    no = "MQ-XN-SPEC2"
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at)"
+                  " VALUES (?,?,?,?,?,?,?,?,?)",
+                  (no, "待審核", "客", "案", 0, 0, json.dumps({"mergeFiles": ["zz"]}), "2026-11-17T00:00:00", "2026-11-17T00:00:00"))
+        c.commit()
+    finally:
+        c.close()
+    u, pw = make_user(username="xn_appr_spec2", role="superadmin")
+    r = client.get("/api/approval-queue/detail?type=quotation&id=" + no, headers=_login(client, u, pw))
+    assert r.status_code == 200, r.text[:300]
+    assert any(f["label"].startswith("併入輸出的規格文件") for f in r.json()["fields"])
+
+
+def test_merge_files_change_makes_signed_approval_stale():
+    from modules.case import content_fp as CFP
+    assert CFP.content_fingerprint({"mergeFiles": ["a"]}) != CFP.content_fingerprint({"mergeFiles": ["a", "b"]})
+    assert CFP.content_fingerprint({"mergeFiles": ["a", "b"]}) != CFP.content_fingerprint({"mergeFiles": ["b", "a"]}), "順序也是內容"

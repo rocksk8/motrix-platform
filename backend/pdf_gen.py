@@ -604,7 +604,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
 #    簽章頁就被縮得越小（而且長度不同縮放不同）。放外面 ⇒ 第一頁的版面與沒有備註時完全一樣。
 # 🔑 用真的 `<table>`＋`<thead>`／`<tfoot>`：Chromium 列印只有這個結構會在每一頁重複抬頭與頁尾（實測 `display:table-*` 的 div 不會）。
 #    全域的 `table`／`tbody td`／`tr` 樣式在 `.xn-page` 內全部歸零。
-EXTRA_NOTES_MAX = 20000
+_EXTRA_NOTES_MAX = 20000
 _EXTRA_NOTES_CSS = (
     '<style>'
     '.xn-page{width:100%;margin:0;border-collapse:collapse;break-before:page;page-break-before:always}'
@@ -624,7 +624,7 @@ def _extra_notes_block(q: dict, ident: dict, dlabel: str, dno: str, sec_no: str)
     text = raw if isinstance(raw, str) else ''
     if not text.strip():
         return ''
-    text = text.replace('\r\n', '\n').replace('\r', '\n').strip('\n')[:EXTRA_NOTES_MAX]
+    text = text.replace('\r\n', '\n').replace('\r', '\n').strip('\n')[:_EXTRA_NOTES_MAX]
 
     def esc(s):
         return _html_text(s, falsy_empty=True)

@@ -159,3 +159,131 @@ def test_manage_templates_superadmin_only_and_saves(client, live_server, make_us
     saved = client.get("/api/settings/quote-notes-templates", headers=_token(client, sup)).json()["templates"]
     assert [(t["name"], t["text"]) for t in saved] == [("我的範本", "要存成範本的內容\n  - 條列")]
     assert page.evaluate(f"() => {ROOT}.notesTpls.length") == 1
+
+
+# ── 規格文件面板（B 段前端；端點由 quotation_specs 提供，這裡用攔截的假回應只驗畫面行為）──────────────
+
+SPECS = [
+    {"id": "s1", "name": "規格甲.pdf", "path": "quotation_specs/x/s1.pdf", "size": 2048, "pages": 3, "status": "ok"},
+    {"id": "s2", "name": "規格乙.pdf", "path": "quotation_specs/x/s2.pdf", "size": 3 * 1048576, "pages": 12, "status": "ok"},
+    {"id": "s3", "name": "加密.pdf", "path": "quotation_specs/x/s3.pdf", "size": 1000, "pages": 0, "status": "encrypted"},
+]
+
+
+def _saved_quote_page(client, live_server, make_user, new_page, login_as, username, specs=None):
+    u = make_user(username=username, role="admin")
+    h = _token(client, u)
+    r = client.post("/api/quotations", headers=h, json={"status": "草稿", "data": {
+        "customerName": "規格客戶", "projectName": "規格專案", "quoteDate": "2026-11-17", "items": [{"description": "品項"}],
+        "tot": {"total": 1000, "pretax": 952, "directMarginPct": 0, "netMarginPct": 0}}})
+    assert r.status_code == 201, r.text
+    no = r.json()["quote_no"]
+    page = new_page()
+    login_as(page, u)
+    if specs is not None:                       # 頁面會在載入／刷新時用單筆 GET 的 specFiles 覆蓋清單：在回應裡注入，畫面才不會被清掉
+        def _inject(route):
+            resp = route.fetch()
+            try:
+                body = resp.json()
+                body["specFiles"] = specs
+                route.fulfill(response=resp, json=body)
+            except Exception:
+                route.fulfill(response=resp)
+        page.route(f"**/api/quotations/{no}", _inject)
+    page.goto(live_server + f"/pages/quotation-form.html?id={no}")
+    _wait_form(page)
+    page.wait_for_function(f"() => {ROOT}.q.quoteNo === '{no}' && !{ROOT}.isNewRecord", timeout=15000)
+    return page, no
+
+
+@pytest.mark.e2e
+def test_spec_panel_select_reorder_and_warnings(client, live_server, make_user, new_page, login_as):
+    page, no = _saved_quote_page(client, live_server, make_user, new_page, login_as, "xn_e2e_spec1", specs=SPECS)
+    rows = page.locator("[data-testid=qf-spec-row]")
+    rows.first.wait_for(state="visible", timeout=5000)
+    assert rows.count() == 3
+    warn = page.locator("[data-testid=qf-spec-warn]:visible")
+    assert warn.count() == 1 and "已加密" in warn.inner_text()
+    assert "3 頁" in rows.nth(0).inner_text() and "3.0 MB" in rows.nth(1).inner_text()
+
+    rows.nth(0).locator("[data-testid=qf-spec-check]").check()
+    rows.nth(1).locator("[data-testid=qf-spec-check]").check()
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == ["s1", "s2"], "勾選順序＝合併順序"
+    page.locator("[data-testid=qf-spec-down]").first.click()                      # s1 往後 ⇒ s2, s1
+    page.wait_for_function(f"() => JSON.stringify({ROOT}.q.mergeFiles) === '[\"s2\",\"s1\"]'", timeout=3000)
+    assert page.evaluate(f"() => {ROOT}.specRows.map(f => f.id)") == ["s2", "s1", "s3"], "已勾選的依合併順序排前面"
+    page.locator("[data-testid=qf-spec-up]").nth(1).click()                       # s1 往前 ⇒ s1, s2
+    page.wait_for_function(f"() => JSON.stringify({ROOT}.q.mergeFiles) === '[\"s1\",\"s2\"]'", timeout=3000)
+
+    # 勾有問題的檔：要先確認；取消 ⇒ 不勾
+    dialogs = []
+    page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    page.locator("[data-testid=qf-spec-row]").nth(2).locator("[data-testid=qf-spec-check]").click()
+    page.wait_for_timeout(200)
+    assert dialogs and "已加密" in dialogs[0], dialogs
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == ["s1", "s2"]
+
+
+@pytest.mark.e2e
+def test_spec_save_sends_merge_order_and_copy_to_new_drops_it(client, live_server, make_user, new_page, login_as):
+    page, no = _saved_quote_page(client, live_server, make_user, new_page, login_as, "xn_e2e_spec2")
+    page.evaluate(f"(s) => {{ const d = {ROOT}; d.specFiles = s; d.q.mergeFiles = ['s2','s1']; d.q.extraNotes = '複製要帶的備註'; }}", SPECS)
+    # 複製為新單：備註文字帶、mergeFiles 不帶
+    page.route("**/api/next-quote-no*", lambda route: route.fulfill(status=200, content_type="application/json", body='{"quote_no":""}'))
+    page.evaluate(f"() => {ROOT}.copyToNew()")
+    page.wait_for_function("() => sessionStorage.getItem('motrix_copy_template')", timeout=8000)
+    tpl = json.loads(page.evaluate("() => sessionStorage.getItem('motrix_copy_template')"))
+    assert tpl["extraNotes"] == "複製要帶的備註"
+    assert "mergeFiles" not in tpl and "specFiles" not in tpl, tpl.keys()
+
+
+@pytest.mark.e2e
+def test_spec_upload_delete_update_list_and_keep_selection(client, live_server, make_user, new_page, login_as, tmp_path):
+    page, no = _saved_quote_page(client, live_server, make_user, new_page, login_as, "xn_e2e_spec3")
+    calls = []
+
+    def _upload(route):
+        calls.append(("POST", route.request.url))
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"specFiles": SPECS[:2], "mergeFiles": []}))
+
+    def _delete(route):
+        calls.append(("DELETE", route.request.url))
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"specFiles": SPECS[1:2], "mergeFiles": []}))
+
+    page.route(f"**/api/quotations/{no}/spec-files", _upload)
+    page.route(f"**/api/quotations/{no}/spec-files/s1", _delete)
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n%%EOF")
+    page.locator("[data-testid=qf-spec-input]").set_input_files(str(pdf))
+    page.wait_for_function(f"() => {ROOT}.specFiles.length === 2", timeout=5000)
+    assert calls and calls[0][0] == "POST"
+    page.evaluate(f"() => {{ {ROOT}.q.mergeFiles = ['s2','s1'] }}")
+    page.on("dialog", lambda d: d.accept())
+    page.locator("[data-testid=qf-spec-row]").filter(has_text="規格甲.pdf").locator("[data-testid=qf-spec-delete]").click()
+    page.wait_for_function(f"() => {ROOT}.specFiles.length === 1", timeout=5000)
+    assert page.evaluate(f"() => {ROOT}.q.mergeFiles") == ["s2"], "刪掉的檔從勾選移除，其餘勾選保留"
+    assert [c[0] for c in calls] == ["POST", "DELETE"]
+
+    # 非 PDF 在前端就擋（不打 API）
+    txt = tmp_path / "x.txt"
+    txt.write_text("hi")
+    msgs = []
+    page.on("dialog", lambda d: msgs.append(d.message))
+    page.locator("[data-testid=qf-spec-input]").set_input_files(str(txt))
+    page.wait_for_timeout(300)
+    assert any("PDF" in m for m in msgs) and len(calls) == 2
+
+
+@pytest.mark.e2e
+def test_download_shows_which_spec_files_were_skipped(client, live_server, make_user, new_page, login_as):
+    page, no = _saved_quote_page(client, live_server, make_user, new_page, login_as, "xn_e2e_spec4")
+    import urllib.parse
+    skipped = urllib.parse.quote(json.dumps([{"id": "s3", "name": "加密.pdf", "reason": "encrypted"}], ensure_ascii=False))
+    page.route(f"**/api/quotations/{no}/pdf-download*", lambda route: route.fulfill(
+        status=200, content_type="application/pdf", body=b"%PDF-1.4\n%%EOF", headers={"X-Pdf-Merge-Skipped": skipped,
+                                                                                      "Access-Control-Expose-Headers": "X-Pdf-Merge-Skipped"}))
+    msgs = []
+    page.on("dialog", lambda d: (msgs.append(d.message), d.dismiss()))
+    page.evaluate(f"() => {ROOT}._downloadServerPdf('external')")
+    page.wait_for_timeout(800)
+    assert msgs and "加密.pdf" in msgs[0] and "已加密" in msgs[0], msgs

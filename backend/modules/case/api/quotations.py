@@ -144,6 +144,7 @@ _TRACKED_QUOTE_FIELDS = [
     ("overheadPct",       "管銷分攤比率"),
     ("notes",             "備註"),
     ("extraNotes",        "備註事項"),          # 報價單／估價單最後一頁的備註事項（2026-11-17）；顯示成字數，不截斷內文
+    ("mergeFiles",        "併入輸出的規格文件"),  # 併入 PDF 的規格檔 id（有序）；顯示成「N 個檔」，檔名不進註記（2026-11-17）
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
     ("contract.contactPerson",   "聯絡人"),
@@ -199,6 +200,13 @@ def _summarize_quote_changes(old: dict, new: dict) -> list:
     changes = []
     for path, label in _TRACKED_QUOTE_FIELDS:
         o, n = _dig(old, path), _dig(new, path)
+        if path == "mergeFiles":            # 沒有／空陣列視為相同；等數但內容或順序不同要講出來（只看個數會誤以為沒變）
+            o, n = (o if isinstance(o, list) else []), (n if isinstance(n, list) else [])
+            if o == n:
+                continue
+            note = "" if len(o) != len(n) else "（內容或順序已變更）"
+            changes.append({"field": label, "from": f"{len(o)} 個檔", "to": f"{len(n)} 個檔{note}"})
+            continue
         if o == n:
             continue
         if path == "extraNotes":            # 長文：顯示字數（截 60 字沒有資訊量）；改了什麼內容看 PDF 版本存檔
@@ -233,6 +241,8 @@ def _diff_view(d: dict) -> dict:
     ② 款項日期：只在 PUT 才正規化。
     使用者真的改了、而且會被存下來的值（頂層未追蹤欄位、款項金額…）仍然不同 ⇒ 仍記一筆。不碰內容指紋（content_fp 另有自己的排除清單）、不改輸入。"""
     out = {k: v for k, v in (d or {}).items() if k not in _DIFF_IGNORE_KEYS}
+    if not out.get("mergeFiles"):            # 沒有／空陣列同義（伺服器存檔時空的會丟鍵）：不算「其他內容」變更
+        out.pop("mergeFiles", None)
     cr = out.get("caseRecord")
     if isinstance(cr, dict):
         cr = {k: v for k, v in cr.items() if k != "stages"}
@@ -1990,7 +2000,7 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     return {"ok": True}
 
 
-#: 備註事項字數上限（純文字；與 pdf_gen.EXTRA_NOTES_MAX 同值，那邊是輸出時的最後一道截斷，這裡是存檔時的伺服器強制）
+#: 備註事項字數上限（純文字；與 pdf_gen._EXTRA_NOTES_MAX 同值，那邊是輸出時的最後一道截斷，這裡是存檔時的伺服器強制）
 EXTRA_NOTES_MAX = 20000
 
 
@@ -7472,6 +7482,19 @@ def detail_quotation(conn, doc_no):
     _xn = d.get("extraNotes")
     if isinstance(_xn, str) and _xn.strip():     # 備註事項（2026-11-17）：會印在送給客戶的 PDF 最後一頁，簽核人要看得到全文；沒填 ⇒ 不加這一列（舊單回應不變）
         out["fields"].append({"label": "備註事項（印在報價單最後一頁）", "value": _xn})
+    _mf = d.get("mergeFiles")
+    if isinstance(_mf, list) and _mf:            # 併入輸出的規格文件（2026-11-17）：簽核人要知道「送出去的 PDF 後面還接了哪些檔、什麼順序」
+        _sp = {}
+        try:
+            _row = conn.execute("SELECT spec_files_json FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
+            _sp = {f.get("id"): f for f in json.loads((_row["spec_files_json"] if _row else "") or "[]") if isinstance(f, dict)}
+        except (sqlite3.OperationalError, TypeError, ValueError):
+            _sp = {}                              # 欄位還沒有（規格文件功能未啟用）或內容壞掉：只列檔數，不擋簽核詳情
+        out["fields"].append({"label": "併入輸出的規格文件（接在報價單後面，依序）", "value": chr(10).join(
+            "%d. %s" % (i + 1, (_sp.get(fid) or {}).get("name") or "（檔案已不存在）") for i, fid in enumerate(_mf) if isinstance(fid, str))})
+        for fid in _mf:
+            if isinstance(fid, str) and fid in _sp:
+                out["files"] += _tagged_file_entries(json.dumps([_sp[fid]], ensure_ascii=False), "規格文件")
     # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
     hist = d.get("editHistory") or []
     if isinstance(hist, list) and hist:
