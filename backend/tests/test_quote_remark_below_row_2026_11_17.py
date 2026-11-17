@@ -221,3 +221,77 @@ def test_adjusted_layout_neutralises_header_width_hints():
     assert "table.items thead th{width:auto!important}" in h
 
 
+
+
+# ───────────── 備註排版選項：每個品項各自選「依輸入換行（wrap，預設）」或「連成一行（inline）」─────────────
+MULTI = "智慧人形偵測 4 路\n每一路攝影機一套 AI 授權\n\n  含 ONVIF 錄影授權 x16  "
+
+
+def _with_layout(layout, notes=MULTI, extra=None):
+    q = _q((notes,))
+    if layout is not ...:
+        q["items"][1]["notesLayout"] = layout
+    if extra:
+        q["items"].append(extra)
+    return q
+
+
+def _rbox(h):
+    return re.findall(r'<div class="rbox"><b>備註</b>(.*?)</div>', h)
+
+
+def test_wrap_is_the_default_and_old_documents_render_byte_identically():
+    no_key = _html(_with_layout(...))
+    assert _html(_with_layout("wrap")) == no_key                       # 明寫 wrap ＝ 沒有這個鍵
+    assert _rbox(no_key) == ["智慧人形偵測 4 路<br>每一路攝影機一套 AI 授權<br><br>  含 ONVIF 錄影授權 x16"]      # 原樣保留換行（外圍空白由 strip 去掉）
+    assert "notesLayout" not in no_key
+
+
+def test_inline_flattens_newlines_into_one_run_joined_by_fullwidth_space():
+    h = _html(_with_layout("inline"))
+    assert _rbox(h) == ["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]     # 空行丟掉、每行去頭尾空白
+    assert "<br>" not in _rbox(h)[0]
+    assert "white-space:nowrap" not in h.split(".rbox{")[1].split("}")[0]                 # 沒有強制不折行：排滿自然折行
+    assert h.count('<tr class="remark-row') == 1 and 'colspan="6"' in _table(h)
+
+
+def test_inline_escapes_html_and_is_per_item():
+    q = _with_layout("inline", notes="<b>x</b>\n&y", extra={"type": "item", "id": "i9", "description": "另一項", "brand": "B",
+                                                          "unit": "台", "qty": 1, "unitPrice": 1, "amount": 1, "cost": 1,
+                                                          "margin": 0, "notes": "第一行\n第二行"})
+    h = _html(q)
+    boxes = _rbox(h)
+    assert boxes[0] == "&lt;b&gt;x&lt;/b&gt;　&amp;y"                                      # 第一項：一行到底
+    assert boxes[1] == "第一行<br>第二行"                                                  # 第二項沒選 ⇒ 預設換行：各品項各自選
+
+
+def test_unknown_layout_values_fall_back_to_wrap_when_rendering():
+    base = _html(_with_layout(...))
+    for bad in ("INLINE", "inline ", "x", 1, None, True, ["inline"], {"a": 1}):
+        assert _html(_with_layout(bad)) == base, bad
+
+
+def test_inline_without_a_remark_adds_nothing():
+    q = _q(("", "", ""))
+    q["items"][1]["notesLayout"] = "inline"
+    assert _html(q) == _html(_q(("", "", "")))
+
+
+def test_estimate_shares_the_layout_option():
+    for internal in (False, True):
+        q = _with_layout("inline")
+        q["docType"] = "estimate"
+        assert _rbox(_html(q, internal=internal)) == ["智慧人形偵測 4 路　每一路攝影機一套 AI 授權　含 ONVIF 錄影授權 x16"]
+
+
+def test_server_cleans_unknown_layout_values_and_leaves_old_items_alone():
+    from helpers import quote_item_notes as N
+    d = {"items": [{"id": 1, "notes": "a"}, {"id": 2, "notesLayout": "inline"}, {"id": 3, "notesLayout": "wrap"},
+                   {"id": 4, "notesLayout": "bogus"}, {"id": 5, "notesLayout": None}, {"id": 6, "notesLayout": 7}, "junk", None]}
+    N.clean_items(d)
+    assert d["items"][0] == {"id": 1, "notes": "a"}                                       # 沒這個鍵：原樣不動
+    assert d["items"][1]["notesLayout"] == "inline" and d["items"][2]["notesLayout"] == "wrap"
+    assert all("notesLayout" not in d["items"][i] for i in (3, 4, 5))                      # 不認得 ⇒ 清掉（＝預設）
+    for junk in (None, {}, {"items": "x"}, []):
+        N.clean_items(junk)                                                               # 垃圾輸入不爆
+    assert N.layout_of({"notesLayout": "inline"}) == "inline" and N.layout_of(None) == "wrap"

@@ -193,3 +193,77 @@ def test_big_amounts_with_long_part_number_do_not_overflow(live_server, make_use
         m = _frame(page).evaluate(_FIT)
         # 客戶版：料號一行；內部版欄多（含成本／毛利率）又是千萬級金額，料號允許在「-」處換成兩行（不溢出、不拆字中間）
         assert m["overflowX"] <= 1 and not any(m["numOverflow"]) and m["brandLines"][0] <= (1 if mode == "external" else 2), (mode, m)
+
+
+# ───────────── 備註排版：編輯畫面切「依輸入換行／連成一行」→ 存檔 → 重新載入 → 預覽 ─────────────
+def _stored(quote_no):
+    import db
+    c = db.get_db()
+    try:
+        return json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()["data_json"])
+    finally:
+        c.close()
+
+
+@pytest.mark.e2e
+def test_note_layout_toggle_saves_reloads_and_renders_in_preview(live_server, make_user, e2e_browser):
+    username, password = make_user(username="e2e_rm5", role="superadmin")
+    no = "MQ-202611-175"
+    import db
+    items = [{"id": 1, "description": "品項甲", "brand": "A", "qty": 1, "unit": "台", "cost": 100, "margin": 0.3,
+              "unitPrice": 143, "amount": 143, "notes": "第一行說明\n第二行說明\n第三行說明"},
+             {"id": 2, "description": "品項乙", "brand": "B", "qty": 1, "unit": "台", "cost": 100, "margin": 0.3,
+              "unitPrice": 143, "amount": 143, "notes": "乙一\n乙二"}]
+    data = {"quoteNo": no, "customerName": "排版客戶", "projectName": "排版專案", "status": "草稿", "items": items,
+            "tot": {"total": 300, "pretax": 286, "directMarginPct": 0, "netMarginPct": 0}}
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, "
+                     "created_at, updated_at, deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     (no, "草稿", "排版客戶", "排版專案", 300, 286, json.dumps(data, ensure_ascii=False),
+                      "2026-11-01T00:00:00", "2026-11-01T00:00:00", "", "2026-11-01"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={no}")
+    page.wait_for_function("() => document.body.innerText.includes('排版客戶')", timeout=20000)
+
+    # 每個有備註的品項都有切換；預設＝「依輸入換行」
+    tog = page.locator('[data-testid="qf-note-layout"]')
+    assert tog.count() == 2
+    assert page.locator('[data-testid="qf-note-layout-wrap"]').first.get_attribute("aria-pressed") == "true"
+    assert page.locator('[data-testid="qf-note-layout-inline"]').first.get_attribute("aria-pressed") == "false"
+    # 只動第一項：切成「連成一行」
+    page.locator('[data-testid="qf-note-layout-inline"]').first.click()
+    assert page.locator('[data-testid="qf-note-layout-inline"]').first.get_attribute("aria-pressed") == "true"
+    assert page.locator('[data-testid="qf-note-layout-inline"]').nth(1).get_attribute("aria-pressed") == "false"
+    page.evaluate(f"() => {DATA_JS}.saveDraft()")
+    page.wait_for_function(f"() => !{DATA_JS}.isDirty", timeout=10000)
+
+    st = _stored(no)["items"]
+    assert st[0]["notesLayout"] == "inline" and "notesLayout" not in st[1]               # 沒動的品項不多出鍵
+
+    # 重新載入後切換狀態還在，預覽：第一項一行、第二項照換行
+    page.reload()
+    page.wait_for_function("() => document.body.innerText.includes('排版客戶')", timeout=20000)
+    assert page.locator('[data-testid="qf-note-layout-inline"]').first.get_attribute("aria-pressed") == "true"
+    page.evaluate(f"{DATA_JS}.openPreview('external')")
+    boxes = _frame(page).evaluate("() => [...document.querySelectorAll('#root .rbox')].map(b => b.innerHTML)")
+    assert boxes[0].endswith("第一行說明　第二行說明　第三行說明") and "<br>" not in boxes[0], boxes
+    assert boxes[1].endswith("乙一<br>乙二"), boxes
+
+    # 切回「依輸入換行」→ 存檔（先關掉預覽視窗，否則遮住按鈕）
+    page.evaluate(f"() => {DATA_JS}.previewMode = null")
+    page.locator('.modal-overlay').first.wait_for(state='hidden', timeout=5000)
+    page.locator('[data-testid="qf-note-layout-wrap"]').first.click()
+    page.evaluate(f"() => {DATA_JS}.saveDraft()")
+    page.wait_for_function(f"() => !{DATA_JS}.isDirty", timeout=10000)
+    assert _stored(no)["items"][0]["notesLayout"] == "wrap"
+    # 伺服器：不認得的值存檔時清成預設（直接送 API 帶來的髒值）
+    page.evaluate(f"() => {{ {DATA_JS}.q.items[0].notesLayout = 'bogus'; {DATA_JS}.setDirty() }}")
+    page.evaluate(f"() => {DATA_JS}.saveDraft()")
+    page.wait_for_function(f"() => !{DATA_JS}.isDirty", timeout=10000)
+    assert "notesLayout" not in _stored(no)["items"][0]

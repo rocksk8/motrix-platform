@@ -26,6 +26,7 @@
 - **內部版表頭成本欄看不見（既有問題，順手修）**：`.cost-cell{background:#FFF8F0}` 權重高過 `thead th`，把表頭「單位成本／毛利率」的黑底蓋成淡橘底配白字。內部版加 `thead th.cost-cell{background:#0A0A0A}`，淡橘底只剩 tbody 的 td。因此 `pdf_golden/expected_platform.json` 的 `quote_internal_draft` 有意更新（僅多這一行 CSS，其餘 14 題不動）。
 - **備註列樣式與報價單一致**：色票全取自報價單既有樣式——底 #FAFAF8／框 #EDEAE4／圓角 4px（同條款方框 `.term-item`）、字 #666（同 `.term-block`）、「備註」小標 Arial 9px #999 字距 .1em（同 `.term-title`），左線 #999；不使用報價單其他地方沒出現過的顏色（有單元測試把關）。
 - **內部版成本／毛利率欄橘底**：有備註列時，斑馬紋的奇偶會被備註列錯位，橘底忽有忽無（h19 審查）；使用者要求成本／毛利率格每一列都淡橘底、不受灰色斑馬紋影響 ⇒ 內部版加 `tbody tr td.cost-cell{background:#FFF8F0}`，同權重、寫在所有斑馬規則（nth-child、.z）之後，有無備註都一樣（`quote_internal_draft` golden 因此再多這一行 CSS，有意更新）。
+- **備註排版選項（使用者 2026-11-17 新增）**：每個品項各自選「依輸入換行」（`wrap`，預設）或「連成一行」（`inline`，忽略換行、各行去頭尾空白後用全形空白接起來，排滿才自然折行）。資料＝品項的 `notesLayout`；沒有這個鍵＝`wrap`，舊單輸出逐位元不變（沒有任何新 class／CSS）。編輯畫面：品名下方備註框旁多一列「備註排版：依輸入換行／連成一行」；PDF、預覽、估價單同一個 `.rbox`；最後一頁的「備註事項」不受影響（永遠換行）。定義集中在 `helpers/quote_item_notes.py`（顯示端與伺服器共用）。**伺服器**：新增、補登、更新報價單存檔時 `clean_items()` 把不認得的 `notesLayout` 值整個鍵刪掉（＝預設）；顯示端對不認得的值也當 `wrap`。**編輯紀錄**：不另記——品項 `notes` 本來就沒有逐欄紀錄，整份 items 有差異時只記一筆「報價項目 N 項 → N 項」，`notesLayout` 比照同一處理（切換排版也會被這筆紀錄涵蓋，不會靜默漏掉）；送簽註記同樣不記這個欄位。
 - **相容**：整張單都沒有備註、且沒有觸發欄寬調整時輸出逐位元不變；`tests/platform/pdf_golden` 只有內部版表頭修正使 `quote_internal_draft` 多一行 CSS（有意更新），其餘 14 題原樣通過。
 - **測試**：`test_quote_remark_below_row_2026_11_17.py`（含估價單客戶版／內部版）、`test_e2e_quote_remark_below_row_2026_11_17.py`。
 

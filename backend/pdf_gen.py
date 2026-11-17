@@ -437,12 +437,15 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     # 品名／廠牌型號依內容自動分配欄寬、數字欄縮到剛好放得下最大金額（見 _quote_col_widths）；
     # 短料號、品名放得下、金額不大（舊單）⇒ None ⇒ 沒有任何新 class／CSS／colgroup，輸出逐位元不變
     _cw = _quote_col_widths(items, internal)
-    def _remark_row(note, span, zebra):
-        # 備註一律移到該品項下方，從「品名」欄（# 欄之後）橫跨到最右；保留換行；與上方品項同一斑馬色
+    from helpers import quote_item_notes as _qin
+    def _remark_row(note, span, zebra, layout=_qin.WRAP):
+        # 備註一律移到該品項下方，從「品名」欄（# 欄之後）橫跨到最右；與上方品項同一斑馬色。
+        # 排版每個品項各自選：wrap（預設）＝保留換行；inline＝一行到底（換行轉全形空白，排滿才自然折行）
         if not note:
             return ''
+        body = esc(_qin.flatten_inline(note)) if layout == _qin.INLINE else esc(note).replace(chr(10), "<br>")
         return (f'<tr class="remark-row{" z" if zebra else ""}"><td></td>'
-                f'<td colspan="{span}"><div class="rbox"><b>備註</b>{esc(note).replace(chr(10), "<br>")}</div></td></tr>')
+                f'<td colspan="{span}"><div class="rbox"><b>備註</b>{body}</div></td></tr>')
     item_rows = ''
     real_idx = 0
     _row_n = 0                              # 已輸出的品項／分組列序（備註列不計）⇒ 斑馬紋以品項為單位，備註列跟著上方品項同色
@@ -486,7 +489,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
                 + f'</tr>'
-                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0)
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0, _qin.layout_of(item))
             )
         else:
             item_rows += (
@@ -499,7 +502,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
                 + f'</tr>'
-                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0)
+                + _remark_row(_note, _ncols - 1, _row_n % 2 == 0, _qin.layout_of(item))
             )
 
     subtotal = tot.get('subtotal', 0)

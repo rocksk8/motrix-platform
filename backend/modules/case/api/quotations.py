@@ -46,6 +46,7 @@ from modules.case.quotations import is_historical_json, put_approval_first, sql_
 from helpers import quote_email as _QE
 from helpers import download_name
 from helpers import doc_type as _DT   # 估價單：單據類型／單號字首／顯示名稱的唯一來源
+from helpers import quote_item_notes as _QIN   # 品項下方備註的排版選項（wrap／inline）
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -2038,6 +2039,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
+    _QIN.clean_items(q)                  # 品項備註排版 notesLayout：不認得的值清成預設（沒有這個鍵的舊單不動）
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -2453,6 +2455,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     validate_quote_tax(q)
     validate_tax_basis(q, "已送出")
     q.pop("clauseTitles", None)
+    _QIN.clean_items(q)
     _PG.prepare(q, user)                    # 利潤／公益金一律以「今天」的口徑計算（使用者裁示 2026-10-16 #2）
     q.pop("settlement", None)
     q["editHistory"] = []
@@ -2557,6 +2560,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     q["quoteNo"] = quote_no
     q.pop("editHistory", None)
     q.pop("clauseTitles", None)          # S-Q2：用戶端送的凍結值一律不採用；下面在寫入交易內依狀態轉換決定（凍結／沿用資料庫現值／清掉）
+    _QIN.clean_items(q)                  # 品項備註排版 notesLayout：不認得的值清成預設（沒有這個鍵的舊單不動）
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
