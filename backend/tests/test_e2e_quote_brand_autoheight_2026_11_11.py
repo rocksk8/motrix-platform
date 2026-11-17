@@ -17,7 +17,7 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 QUOTE_NO = "MQ-202611-901"
 LONG = "Cisco Catalyst C9300-48P-E 48-port PoE+ Network Essentials 含三年原廠保固 SmartNet 8x5xNBD"
-BRAND = "tbody textarea[placeholder='廠牌 / 型號']"
+BRAND = "tbody textarea[data-testid='qf-item-brand']"
 NOTES = "tbody textarea[placeholder='備註']"
 DESC = "tbody textarea[placeholder='品名或規格說明']"
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -144,7 +144,7 @@ def test_no_window_errors_and_many_rows_fit(live_server, make_user, e2e_browser)
     inject_login(page, live_server, username, password)
     _seed([_item(i, brand=LONG, notes=LONG) for i in range(1, 31)])
     page.goto(f"{live_server}/pages/quotation-form.html?id={QUOTE_NO}")
-    page.wait_for_function("() => document.querySelectorAll(\"tbody textarea[placeholder='廠牌 / 型號']\").length >= 30", timeout=20000)
+    page.wait_for_function("() => document.querySelectorAll(\"tbody textarea[data-testid='qf-item-brand']\").length >= 30", timeout=20000)
     page.locator(BRAND).first.evaluate("e => { document.querySelectorAll('tbody textarea').forEach(x => x.style.width = '70px') }")
     page.wait_for_function(
         "() => [...document.querySelectorAll('tbody textarea')].every(e => e.getBoundingClientRect().height >= e.scrollHeight - 1)",
@@ -157,7 +157,7 @@ def test_row_hidden_then_shown_regrows(live_server, make_user, e2e_browser):
     # 區段標題列（type=header）的廠牌欄 x-show=false：隱藏時量到 0，不可把高度寫成 0；轉成一般品項顯示後要撐開
     page = _open(live_server, make_user, e2e_browser,
                  [_item(1, type="header", brand=LONG), _item(2)], "e2e_bh5")
-    el = page.locator("tbody tr").first.locator("textarea[placeholder='廠牌 / 型號']")
+    el = page.locator("tbody tr").first.locator("textarea[data-testid='qf-item-brand']")
     page.wait_for_timeout(300)
     assert not el.is_visible()
     assert el.evaluate("e => e.style.height") != "0px", "隱藏中量到 0 不可寫成高度（顯示後會被壓成一條線）"

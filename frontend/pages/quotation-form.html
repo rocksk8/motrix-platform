@@ -210,6 +210,14 @@
       border-bottom: 1px solid var(--border-light);
       white-space: nowrap;
     }
+    .items-table th .col-label-input {
+      width: 100%; min-width: 96px; box-sizing: border-box; font: inherit; color: inherit; text-align: left;
+      background: transparent; border: 0; border-bottom: 1px dashed currentColor; padding: 1px 0; outline: none;
+    }
+    .items-table th .col-label-input::placeholder { color: inherit; opacity: .85 }
+    .items-table th .col-label-input:focus { border-bottom-style: solid }
+    .items-table th .col-label-edit { background: none; border: 0; color: inherit; opacity: .55; cursor: pointer; padding: 0 2px; margin-left: 3px; vertical-align: middle }
+    .items-table th .col-label-edit:hover, .items-table th .col-label-edit:focus-visible { opacity: 1 }
     .items-table th.internal {
       background: #FFF8F0;
       color: #B45309;
@@ -883,6 +891,14 @@
             <div x-show="submitNoteError" style="color:#ef4444;font-size:11px;margin-top:3px">請填寫代理送出原因</div>
           </div>
         </template>
+        <!-- 欄名變更註記（送簽時會寫進簽核依據，主管在簽核畫面看得到） -->
+        <template x-if="columnLabelNotes().length > 0">
+          <div data-testid="qf-submit-col-notes" style="margin-top:12px;background:#F3F4F6;border:1px solid #D1D5DB;border-radius:8px;padding:8px 12px;font-size:12px;color:#374151">
+            <template x-for="r in columnLabelNotes()" :key="r">
+              <div x-text="'· ' + r" style="line-height:1.75"></div>
+            </template>
+          </div>
+        </template>
         <!-- 特殊條件警示 -->
         <template x-if="approvalReasons.length > 0">
           <div style="margin-top:12px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400E">
@@ -1302,7 +1318,7 @@
                     <thead>
                       <tr style="background:#FEF0E0;color:#7C2D12">
                         <th style="padding:5px 8px;text-align:left;font-weight:600">品項說明</th>
-                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:100px">廠牌 / 型號</th>
+                        <th style="padding:5px 8px;text-align:left;font-weight:600;width:100px" x-text="columnLabel('brand')">廠牌 / 型號</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:55px">數量</th>
                         <th style="padding:5px 8px;text-align:left;font-weight:600;width:70px">單位</th>
                         <th style="padding:5px 8px;text-align:right;font-weight:600;width:90px">單價</th>
@@ -1784,8 +1800,33 @@
             <thead>
               <tr>
                 <th style="width:32px">#</th>
-                <th style="min-width:180px">品名 / 規格說明</th>
-                <th style="min-width:120px">廠牌 / 型號</th>
+                <!-- 欄名可自訂（報價單、估價單同）：每欄可從常用選項挑，也可自己打字；清空＝回到預設名稱。送簽時系統會註記欄名有變更（後端 helpers/quote_brand_label.py） -->
+                <th style="min-width:180px" data-testid="qf-col-th-item">
+                  <span x-show="columnEditing !== 'item'" x-text="columnLabel('item')" data-testid="qf-col-label-text-item">品名 / 規格說明</span>
+                  <button type="button" class="col-label-edit" x-show="columnEditing !== 'item'"
+                          @click="startColumnEdit('item')" data-testid="qf-col-label-edit-item"
+                          :title="'修改欄名（可從常用選項挑，或自己打字；清空＝' + COLUMN_LABEL_DEFAULTS.item + '）'" aria-label="修改欄名">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                  </button>
+                  <input type="text" class="col-label-input" list="col-label-options-item" maxlength="20" x-ref="colLabelInput_item"
+                         x-show="columnEditing === 'item'" data-testid="qf-col-label-item" aria-label="欄名"
+                         :placeholder="COLUMN_LABEL_DEFAULTS.item" :value="(q.columnLabels && q.columnLabels.item) || ''"
+                         @input="setColumnLabel('item', $event.target.value)"
+                         @blur="columnEditing = ''" @keydown.enter.prevent="$event.target.blur()" @keydown.escape.prevent="$event.target.blur()">
+                </th>
+                <th style="min-width:120px" data-testid="qf-col-th-brand">
+                  <span x-show="columnEditing !== 'brand'" x-text="columnLabel('brand')" data-testid="qf-col-label-text-brand">廠牌 / 型號</span>
+                  <button type="button" class="col-label-edit" x-show="columnEditing !== 'brand'"
+                          @click="startColumnEdit('brand')" data-testid="qf-col-label-edit-brand"
+                          :title="'修改欄名（可從常用選項挑，或自己打字；清空＝' + COLUMN_LABEL_DEFAULTS.brand + '）'" aria-label="修改欄名">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                  </button>
+                  <input type="text" class="col-label-input" list="col-label-options-brand" maxlength="20" x-ref="colLabelInput_brand"
+                         x-show="columnEditing === 'brand'" data-testid="qf-col-label-brand" aria-label="欄名"
+                         :placeholder="COLUMN_LABEL_DEFAULTS.brand" :value="(q.columnLabels && q.columnLabels.brand) || ''"
+                         @input="setColumnLabel('brand', $event.target.value)"
+                         @blur="columnEditing = ''" @keydown.enter.prevent="$event.target.blur()" @keydown.escape.prevent="$event.target.blur()">
+                </th>
                 <th style="min-width:44px">數量</th>
                 <th style="width:100px">單位</th>
                 <template x-if="showCostCols">
@@ -1825,7 +1866,7 @@
                   <td class="va-top qf-c-desc">
                     <textarea :class="item.type === 'header' ? 'cell-textarea header-desc' : 'cell-textarea'"
                               x-model="item.description"
-                              :placeholder="item.type === 'header' ? '區段標題（如：網路設備、伺服器）' : '品名或規格說明'"
+                              :placeholder="item.type === 'header' ? '區段標題（如：網路設備、伺服器）' : (columnLabel('item') === COLUMN_LABEL_DEFAULTS.item ? '品名或規格說明' : columnLabel('item'))"
                               rows="1"
                               @input="setDirty(); autoGrow($el)"
                               x-init="autoGrowInit($el)"
@@ -1861,9 +1902,9 @@
                     </div>
                   </td>
                   <td class="va-top qf-c-brand">
-                    <textarea class="cell-textarea" x-model="item.brand"
+                    <textarea class="cell-textarea" x-model="item.brand" data-testid="qf-item-brand"
                               x-show="item.type !== 'header'"
-                              placeholder="廠牌 / 型號" rows="1"
+                              :placeholder="columnLabel('brand')" rows="1"
                               @input="setDirty(); autoGrow($el)"
                               x-init="autoGrowInit($el)"
                               x-effect="item.brand; autoGrowLater($el)"></textarea>
@@ -1949,6 +1990,8 @@
             </tbody>
           </table>
         </div>
+        <datalist id="col-label-options-item"><template x-for="p in COLUMN_LABEL_PRESETS.item" :key="p"><option :value="p"></option></template></datalist>
+        <datalist id="col-label-options-brand"><template x-for="p in COLUMN_LABEL_PRESETS.brand" :key="p"><option :value="p"></option></template></datalist>
         <datalist id="alt-group-options"><template x-for="g in altGroupNames()" :key="g"><option :value="g"></option></template></datalist>
         <div class="alt-warn" x-show="altIssues().length" data-testid="qf-alt-issues">
           <template x-for="m in altIssues()" :key="m"><div x-text="m"></div></template>
@@ -4742,8 +4785,9 @@
         }
         this.submitting = true
         this.showSubmitModal = false
-        const reasons = this.approvalReasons.length > 0
-          ? [...this.approvalReasons]
+        const _colNotes = this.columnLabelNotes()      // 欄名變更註記（與後端 helpers/quote_brand_label.change_reasons 同字；後端送出時會自己重建一次）
+        const reasons = (this.approvalReasons.length > 0 || _colNotes.length > 0)
+          ? [...this.approvalReasons, ..._colNotes]
           : ['標準報價單送出']
         if (this.isSalesPersonChanged) {
           const submitter = this.session.displayName || this.session.username
@@ -5230,6 +5274,35 @@
       // 版面與流程完全相同，只有名稱不同。名稱取法：docLabel()；畫面上其餘寫死的「報價單」字樣，
       // 估價單時由 _applyDocSkin() 在這一頁統一換成「估價單」（靜態文字、Alpine 動態文字、toast／alert／confirm 都涵蓋）。
       docLabel() { return this.q.docType === 'estimate' ? '估價單' : '報價單' },
+      // 品項表欄名（「品名 / 規格說明」item、「廠牌 / 型號」brand）：報價單可自訂、存在單據 q.columnLabels = {item, brand}（只存有改的欄）；
+      // 空白／與預設相同＝預設（報價單、估價單同）。常數同後端 helpers/quote_brand_label.py（COLUMNS／MAX_LEN）——改一邊要改另一邊
+      COLUMN_LABEL_DEFAULTS: { item: '品名 / 規格說明', brand: '廠牌 / 型號' },
+      COLUMN_LABEL_PRESETS: {
+        item: ['品名 / 規格說明', '品名', '品項', '項目', '規格說明'],
+        brand: ['料號', '型號', '規格', '廠牌 / 型號'],
+      },
+      columnEditing: '',          // 正在改哪一欄的欄名（'' ＝ 沒有）；只存在畫面，不寫進單據
+      startColumnEdit(col) {
+        this.columnEditing = col
+        this.$nextTick(() => { const i = this.$refs['colLabelInput_' + col]; if (i) { i.focus(); i.select() } })
+      },
+      setColumnLabel(col, v) {
+        this.q.columnLabels = { ...(this.q.columnLabels || {}), [col]: v }
+        this.setDirty()
+      },
+      columnLabel(col) {
+        const def = this.COLUMN_LABEL_DEFAULTS[col]
+        const raw = this.q.columnLabels && this.q.columnLabels[col]
+        // 與後端 normalize 同順序：先壓空白、再去控制／零寬字元、截斷；與預設相同＝預設
+        const s = String(raw || '').replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028\u2029\ufeff]/g, '').trim().slice(0, 20).trim()
+        return (!s || s === def) ? def : s
+      },
+      // 送簽註記：每個被改過的欄一行（欄名沒變＝[]）。不併進 approvalReasons——那份要和後端 compute_approval_reasons 逐字一致（parity 測試）
+      columnLabelNotes() {
+        return Object.keys(this.COLUMN_LABEL_DEFAULTS)
+          .filter(c => this.columnLabel(c) !== this.COLUMN_LABEL_DEFAULTS[c])
+          .map(c => '欄名已由「' + this.COLUMN_LABEL_DEFAULTS[c] + '」變更為「' + this.columnLabel(c) + '」')
+      },
       // 開立前（還沒存過）可以選類型；選了就重新取號（兩種類型的單號各自獨立）。存過就鎖定。
       async setDocType(t) {
         t = t === 'estimate' ? 'estimate' : 'quote'
