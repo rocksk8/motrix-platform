@@ -15,6 +15,7 @@
 
 [單位] helper:quote_brand_label    [層] L1    [穩定度] 契約
 [公開介面] APPLIES_TO, COLUMNS, KEY, MAX_LEN, applies, change_reasons, default_of, label_of, labels_of, normalize, presets_of, sanitize
+[契約題] backend/tests/test_quote_brand_column_label_2026_11_17.py
 """
 import re
 
