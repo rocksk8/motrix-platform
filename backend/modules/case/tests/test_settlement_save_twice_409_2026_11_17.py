@@ -13,6 +13,9 @@ from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import URL
 from modules.case.tests._t40_won import quote_is_won  # noqa: F401
 
 
+USER = "pl_sa"            # `W` 夾具建立的使用者：稽核表讀取一律只看自己這個人的列（audit_reads_scoped 守門；別的測試的列不會漏進來）
+
+
 @pytest.fixture(autouse=True)
 def _reset_fail_last():
     """fail.PUT 稽核有 (用戶,方法,路由,狀態碼) 的 repeat 合併表 `_FAIL_LAST`（行程內）：前一個測試留下的鍵會讓本檔第一次失敗併進別的資料庫的列 ⇒ 前後都清（同行程跑 settle 子集時才會現形）。"""
@@ -69,14 +72,14 @@ def test_each_settlement_409_carries_its_own_fail_reason_code(case, client):
     # 稽核列：reason_code 與 detail.msg（只有欄位名稱，沒有金額）
     cn = db.get_db()
     try:
-        ok_det = json.loads(cn.execute("SELECT detail FROM audit_log WHERE action='quotation.settlement' ORDER BY id DESC LIMIT 1").fetchone()["detail"])
+        ok_det = json.loads(cn.execute("SELECT detail FROM audit_log WHERE action='quotation.settlement' AND username=? ORDER BY id DESC LIMIT 1", (USER,)).fetchone()["detail"])
     finally:
         cn.close()
     assert ok_det.get("updated_at") == ok.json()["updated_at"], "成功存檔的稽核要記回給頁面的版本戳記：%s" % ok_det
     cn = db.get_db()
     try:
         rows = [(r["reason_code"], json.loads(r["detail"] or "{}")) for r in cn.execute(
-            "SELECT reason_code, detail FROM audit_log WHERE action='fail.PUT' ORDER BY id").fetchall()]
+            "SELECT reason_code, detail FROM audit_log WHERE action='fail.PUT' AND username=? ORDER BY id", (USER,)).fetchall()]
     finally:
         cn.close()
     codes = {code for code, _ in rows}
@@ -107,7 +110,7 @@ def test_stale_version_audit_msg_keeps_db_value_even_with_overlong_client_value(
     assert r.status_code == 409 and r.headers.get("X-Fail-Reason") == "stale_version"
     cn = db.get_db()
     try:
-        row = cn.execute("SELECT detail FROM audit_log WHERE action='fail.PUT' ORDER BY id DESC LIMIT 1").fetchone()
+        row = cn.execute("SELECT detail FROM audit_log WHERE action='fail.PUT' AND username=? ORDER BY id DESC LIMIT 1", (USER,)).fetchone()
     finally:
         cn.close()
     msg = json.loads(row["detail"] or "{}").get("msg", "")
