@@ -29,6 +29,15 @@ from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_c
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
 from helpers import pdf_scripts as _PS
+from helpers.tax_calc import _parse_money, _MONEY_BAD   # L1 內部沿用 T87 的款項轉換規則（不外露、不新增公開介面）
+
+
+def _money_num(v):
+    """舊資料 quotations.total／pretax 存成文字（"12,345"）時轉數字；沒填或壞值當 0（不 500）。同 `tax_calc._parse_money`。"""
+    n = _parse_money(v)
+    return 0 if n is None or n is _MONEY_BAD else n
+
+
 from helpers import doc_type as _DT              # 估價單：標題與浮水印用語依單據類型（版型沿用報價單）
 from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
@@ -2585,7 +2594,7 @@ def _case_closing_report_data(quote_no: str) -> dict:
     # 顯示含稅金額，跟畫面／Excel／營運報表同一筆案件兩個數字。helpers 那邊
     # docstring 說的「拿不到 pretax 就維持舊行為」不適用於這裡——SELECT 本來
     # 就有撈 pretax（見上方查詢），純粹是漏接。
-    total = row["total"] or 0
+    total = _money_num(row["total"])
     pay   = (cr.get("payment") or {}).get("items", [])
     payment_rows = []
     if pay:
@@ -2672,8 +2681,8 @@ def _case_closing_report_data(quote_no: str) -> dict:
         "dealTag":      row["deal_tag"] or "",
         "settleStatus": row["settle_status"] or "",
         "total":        total,
-        "pretax":       row["pretax"] or 0,
-        "taxAmount":    total - (row["pretax"] or 0),
+        "pretax":       _money_num(row["pretax"]),
+        "taxAmount":    total - _money_num(row["pretax"]),
         "paymentRows":  payment_rows,
         "receivedTotal": sum((pr["actualAmount"] if pr["actualAmount"] is not None else pr["amount"])
                              for pr in payment_rows if pr["received"]),

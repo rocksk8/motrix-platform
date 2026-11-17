@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-17（fix/quote-total-text-500；舊資料報價單金額存成文字）
+- 修正（無 API／欄位／權限變更；乾淨數字資料輸出逐位元不變）：舊資料 `quotations.total`／`pretax` 存成文字（"12,345"）時，案件財務摘要（finance-summary）與權責認列旗標／收入（`recognition.py`）不再 500；文字轉數字、無法解析的當 0。共用輔助放在各模組內（`modules/arap/money_num.py`、`modules/case/money_num.py`；analytics 沿用既有 `reports._money`，pdf_gen 沿用 L1 的 `tax_calc._parse_money`），規則與 T87 `tax_calc._parse_money`／`reports._num_or_bad` 相同；`helpers/` 下每個檔都必須歸屬 L1 或某模組，新增 helper＝改 L1 介面＝升核心版，本批不升。測試：`tests/test_quote_total_text_500_2026_11_17.py`。
+- 待辦（下次升核心版時）：把 `tax_calc._parse_money` 公開成 L1 函式，arap／case／analytics 三份收斂到它，刪除 `modules/arap/money_num.py`、`modules/case/money_num.py`。
+
 ## 1.0.242 — 2026-11-14（feat/t87-b2-h12；T87 B2 自訂報表，含 h11 審查修正與預診斷修復；版號由列車取）
 - 新增（行為、API、欄位、權限語意不變）：`report_source.py` 登記自訂報表來源 `quotation`／`case`（沿用清單的成交標記、精算狀態、報價日運算式常數與列範圍；報表進入條件比清單窄＝需 quotation 或 case_manage 模組）；`quotations.py` 新增共用常數 `SQL_QUOTE_DATE`（清單排序改引用同一個常數，結果不變）。json_extract 棘輪 40→41 經 PM 核准。測試：`tests/platform/test_report_catalog_t87.py`、`test_report_runner_t87.py`。
 - 修正（只影響自訂報表選項，旗標後；h11 審查）：`report_source` 的狀態／成交標記／精算狀態選項改為只列呼叫者看得到的列的值、只讀實體欄位（不碰 `data_json`）、每人快取 60 秒；沒有使用者回空。

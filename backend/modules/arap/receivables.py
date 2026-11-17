@@ -21,6 +21,7 @@ from typing import Optional
 from db import get_db
 from helpers import payment_item_amounts, receipt_amounts
 from helpers.tax_calc import norm_ymd, quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1（第六班合回後補：receivables 在第六班才進 platform）
+from modules.arap.money_num import money_num   # 舊資料金額存成文字（"12,345"）時轉數字，壞值當 0（不 500）
 
 __all__ = ["collect_income_items", "collect_tax_invoices", "round_half_up_invoice"]
 
@@ -88,8 +89,8 @@ def collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None
         #   舊 1～4% 單：**不改數字**（沿用原本的 5% 倒推），標「非法定稅率，請會計確認」。
         #   ⚠️ 與實際發票可能差 ±1 元：收款項沒有記載發票上的稅額，以發票為準（交付說明）。
         tax_type = quote_tax_type({"taxType": row["tax_type"], "taxRate": row["tax_rate"]})
-        q_total  = float(row["total"] or 0)
-        q_pretax = float(row["pretax"] or 0) or q_total
+        q_total  = float(money_num(row["total"]))
+        q_pretax = float(money_num(row["pretax"])) or q_total
         for idx, pi in enumerate(items):
             if not isinstance(pi, dict):                 # 款項項目不是物件（髒資料）：略過，不讓整張報表 500（T87 修）
                 continue

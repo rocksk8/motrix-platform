@@ -29,6 +29,7 @@ from core.txn import begin_write, write_txn
 from helpers import recycle_bin   # 第 53 班：資源回收筒 L1 契約（IP-RB1／RB2）
 from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
+from modules.arap.money_num import money_num   # 舊資料金額存成文字（"12,345"）時轉數字，壞值當 0（不 500）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
@@ -201,8 +202,8 @@ def _quote_remaining(conn, quote_no: str):
     if not q:
         return None
     data = json.loads(q["data_json"] or "{}")
-    quote_total = float(q["total"] or 0)
-    quote_pretax = float(q["pretax"] or 0) or quote_total  # 沒有 pretax 資料時退回等於含稅（稅率視為 0）
+    quote_total = float(money_num(q["total"]))
+    quote_pretax = float(money_num(q["pretax"])) or quote_total  # 沒有 pretax 資料時退回等於含稅（稅率視為 0）
 
     rows = conn.execute(
         "SELECT amount, snapshot_json FROM invoice_vouchers WHERE quote_no=?", (quote_no,)
@@ -329,8 +330,8 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
             conn.close()
             raise HTTPException(404, "找不到關聯的報價單")
         data = json.loads(q["data_json"] or "{}")
-        quote_total  = float(q["total"] or 0)
-        quote_pretax = float(q["pretax"] or 0) or quote_total
+        quote_total  = float(money_num(q["total"]))
+        quote_pretax = float(money_num(q["pretax"])) or quote_total
 
         customer_id = data.get("customerId")
         customer_tax_id = ""
