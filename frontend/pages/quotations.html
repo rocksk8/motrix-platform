@@ -255,23 +255,24 @@
 
     <!-- 頁頂三個數字（可點擊篩選；定義固定，見 UX-BUSINESS-PAGES-PROPOSAL §3.3） -->
     <div class="summary-row" data-testid="ql-summary">
-      <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" :disabled="!mineOk" data-testid="ql-sum-todo" @click="setFocus('todo')"
-              title="您負責的報價單裡：草稿、已退回待修改、已核准尚未送給客戶的">
-        <span class="ql-sum__lbl">待我處理</span>
-        <span class="ql-sum__val" :style="mineOk && summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="mineOk ? summaryData.todo + ' 張' : '—'"></span>
-        <span class="ql-sum__sub" x-text="mineOk ? '草稿、已退回、已核准待寄客戶' : '暫時無法計算'"></span>
+      <!-- 最高管理者：三個數字算全公司（與列表口徑一致），標題冠「全公司」；其他角色維持「我負責的」 -->
+      <button type="button" class="ql-sum" :class="{ on: focus === 'todo' }" :disabled="!cardsOk" data-testid="ql-sum-todo" @click="setFocus('todo')"
+              :title="_isSuper ? '全公司的報價單裡：草稿、已退回待修改、已核准尚未送給客戶的' : '您負責的報價單裡：草稿、已退回待修改、已核准尚未送給客戶的'">
+        <span class="ql-sum__lbl" data-testid="ql-sum-todo-lbl" x-text="_isSuper ? '全公司待處理' : '待我處理'"></span>
+        <span class="ql-sum__val" :style="cardsOk && summaryData.todo > 0 ? 'color:var(--accent)' : ''" x-text="cardsOk ? summaryData.todo + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="cardsOk ? '草稿、已退回、已核准待寄客戶' : '暫時無法計算'"></span>
       </button>
-      <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" :disabled="!mineOk" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
-              title="您負責的報價單裡，正在簽核的（待簽核與簽核中）">
-        <span class="ql-sum__lbl">等待他人</span>
-        <span class="ql-sum__val" x-text="mineOk ? summaryData.waiting + ' 張' : '—'"></span>
-        <span class="ql-sum__sub" x-text="mineOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
+      <button type="button" class="ql-sum" :class="{ on: focus === 'waiting' }" :disabled="!cardsOk" data-testid="ql-sum-waiting" @click="setFocus('waiting')"
+              :title="_isSuper ? '全公司的報價單裡，正在簽核的（待簽核與簽核中）' : '您負責的報價單裡，正在簽核的（待簽核與簽核中）'">
+        <span class="ql-sum__lbl" data-testid="ql-sum-waiting-lbl" x-text="_isSuper ? '全公司簽核中' : '等待他人'"></span>
+        <span class="ql-sum__val" x-text="cardsOk ? summaryData.waiting + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="cardsOk ? '待簽核 ' + summaryData.pending + '・簽核中 ' + summaryData.signing : '暫時無法計算'"></span>
       </button>
-      <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" :disabled="!mineOk" data-testid="ql-sum-won" @click="setFocus('won')"
-              title="您負責的報價單裡，本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統未另行記錄成案日）。全公司的數字在儀表板。">
-        <span class="ql-sum__lbl">本月已成案</span>
-        <span class="ql-sum__val" x-text="mineOk ? summaryData.wonCount + ' 張' : '—'"></span>
-        <span class="ql-sum__sub" x-text="mineOk ? 'NT$ ' + MotrixFormat.num(summaryData.wonTotal) + '・以報價日期計' : '暫時無法計算'"></span>
+      <button type="button" class="ql-sum" :class="{ on: focus === 'won' }" :disabled="!cardsOk" data-testid="ql-sum-won" @click="setFocus('won')"
+              :title="(_isSuper ? '全公司的報價單裡，' : '您負責的報價單裡，') + '本月報價且標記為「已成案」或「已結案」的張數與合計金額。以報價日期計算（系統未另行記錄成案日）。' + (_isSuper ? '' : '全公司的數字在儀表板。')">
+        <span class="ql-sum__lbl" data-testid="ql-sum-won-lbl" x-text="_isSuper ? '全公司本月已成案' : '本月已成案'"></span>
+        <span class="ql-sum__val" x-text="cardsOk ? summaryData.wonCount + ' 張' : '—'"></span>
+        <span class="ql-sum__sub" x-text="cardsOk ? 'NT$ ' + MotrixFormat.num(summaryData.wonTotal) + '・以報價日期計' : '暫時無法計算'"></span>
       </button>
     </div>
 
@@ -356,8 +357,8 @@
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
         <label x-show="lvOn.tab">預設頁籤
           <select class="search-input" x-model="pv.tab" style="max-width:140px;margin-left:6px">
-            <option value="">進行中（預設）</option>
-            <template x-for="t in tabs.filter(t => t.key !== 'all')" :key="t.key"><option :value="t.key" x-text="t.label"></option></template>
+            <option value="" x-text="_isSuper ? '全部（預設）' : '進行中（預設）'"></option>
+            <template x-for="t in tabs.filter(t => t.key !== _defTab)" :key="t.key"><option :value="t.key" x-text="t.label"></option></template>
           </select>
         </label>
         <label x-show="lvOn.size">每頁筆數
@@ -392,7 +393,7 @@
       <template x-for="ph in LIFECYCLES" :key="ph.key">
         <button type="button" class="vm-andon__seg ql-phase"
                 :class="{ on: phaseFilter === ph.key }"
-                @click="phaseFilter = (phaseFilter === ph.key ? '' : ph.key); activeTab = 'all'; focus = ''">
+                @click="phaseFilter = (phaseFilter === ph.key ? '' : ph.key); activeTab = _defTab; focus = ''">
           <span class="vm-andon__val" :style="'color:' + ph.color" x-text="phaseCount(ph.key)"></span>
           <span class="vm-andon__lbl">
             <span x-text="ph.label"></span>
@@ -668,7 +669,7 @@
       filterMonth: '',
       filterDealTag: '',
       filterDocType: '',          // 單據類型篩選：''＝全部｜quote｜estimate（舊資料一律是報價單）
-      // T84：預設「我負責的、進行中」；每人記住上次選擇（localStorage，讀寫失敗就用預設）
+      // T84：預設「我負責的、進行中」（最高管理者預設看全部，見 _mineKey）；每人記住上次選擇（localStorage，讀寫失敗就用預設）
       onlyMine: true,                // 記住的選擇（只有「僅顯示我負責的」開關會改寫它）
       showAll: false,                // 「清除條件」＝這次暫時看全部（不改寫記住的選擇）
       mineOk: false,                 // 「我負責的」名單讀到了嗎（沒讀到 ⇒ 數字顯示「暫時無法計算」、不限縮）
@@ -736,7 +737,7 @@
       // 自訂排序要拖曳，Sortable 綁在單一 tbody 上（initSortable 讀 $refs.quotesTbody），
       // 分成多個 tbody 會讓拖曳跨不過去；分頁已經選定單一階段時分段也沒有意義。
       get useLanes() {
-        return this.activeTab === 'all' && this.sortPref.sortMode !== 'custom' && !this.phaseFilter && !this.focus
+        return (this.activeTab === 'all' || this.activeTab === 'every') && this.sortPref.sortMode !== 'custom' && !this.phaseFilter && !this.focus
       },
 
       get displayLanes() {
@@ -781,6 +782,8 @@
         // 2026-09-24：原名「全部(不含未成案)」，但它同時也藏了「已結案」——名稱與內容不符
         { key: 'all',    label: '進行中',
           title: '不含「未成案」與「已結案」。\n分頁上的草稿～已確認是報價單的簽核狀態；\n已結案、未成案是案件的成案標記，兩者是不同的欄位。' },
+        // 2026-11-17：「全部」＝所有狀態（含已結案、未成案、已取消）。最高管理者預設停在這一頁，其他角色預設仍是「進行中」。
+        { key: 'every',  label: '全部', title: '所有狀態，含已結案、未成案、已取消。' },
         { key: '草稿',   label: '草稿'  },
         { key: '待審核', label: '待簽核' },
         { key: '已核准', label: '已核准' },
@@ -797,6 +800,7 @@
 
       tabCount(key) {
         const base = this.quotes.filter(q => this._matchMine(q))
+        if (key === 'every') return base.length
         if (key === 'all') return base.filter(q => (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案').length
         const tab = this.tabs.find(t => t.key === key)
         if (tab && tab.isDealTag) return base.filter(q => q.deal_tag === key).length
@@ -809,6 +813,11 @@
       get _mineLimit() { return this.onlyMine && !this.showAll && this.mineOk && this.mineSet.size > 0 && !this.focus && !this.search.trim() },
       _matchMine(q) { return !this._mineLimit || this.mineSet.has(q.quote_no) },
       _isMineQ(q) { return this.mineSet.has(q.quote_no) },
+      // 三個數字／點數字的篩選範圍：最高管理者＝全公司（不依賴「我負責的」名單）；其他角色＝我負責的（名單讀不到 ⇒ 暫時無法計算）
+      _inCardScope(q) { return this._isSuper || this._isMineQ(q) },
+      get cardsOk() { return this._isSuper ? (!this.loading && !this.loadErr) : this.mineOk },
+      // 預設頁籤：最高管理者＝「全部」（含已結案、未成案）；其他角色＝「進行中」（T84 不變）。預設頁籤不算「有套用條件」
+      get _defTab() { return this._isSuper ? 'every' : 'all' },
       get mineNote() {
         if (!this.onlyMine || this.showAll || this.focus || this.search.trim() || this.loading) return ''
         if (!this.mineOk) return '暫時無法判斷哪些是您負責的，先顯示全部'
@@ -821,22 +830,27 @@
       },
       setMine(v) {
         this.onlyMine = v; this.showAll = false; this.focus = ''
-        try { localStorage.setItem('motrix_quote_mine:' + this._uk(), v ? '1' : '0') } catch (e) {}
+        try { localStorage.setItem(this._mineKey(), v ? '1' : '0') } catch (e) {}
       },
+      // 最高管理者要預設看全部（2026-11-17 使用者裁示）。T84 對所有人預設寫入的 'motrix_quote_mine:<人>'='1' 無法分辨「預設」與「自己選的」，
+      // 所以最高管理者改讀新 key（_v2）：舊 key 一律不讀 ⇒ 第一次進來回到全部；之後他自己按「僅顯示我負責的」才寫 _v2 並記住。其他角色沿用舊 key，行為不變。
+      get _isSuper() { return !!(this.session && this.session.role === 'superadmin') },
+      _mineKey() { return (this._isSuper ? 'motrix_quote_mine_v2:' : 'motrix_quote_mine:') + this._uk() },
       get extraFilterCount() { return [this.filterSales, this.filterMonth, this.filterDealTag].filter(Boolean).length },
       _isWaiting(q) { return q.status === '待審核' || q.status === '簽核中' },
       // 要我處理＝我的草稿＋被退回待修＋已核准尚未送客戶（資料狀態值不變，只是這一頁怎麼數）
       _isTodo(q) { return q.status === '已拒絕' || ((q.status === '草稿' || q.status === '已核准') && this.lifecycleOf(q) !== 'closed') },
       _isWon(q) { return (q.deal_tag === '已成案' || q.deal_tag === '已結案') && (q.quote_date || q.created_at || '').startsWith(MotrixDate.thisMonth()) },
       setFocus(k) {
-        if (!this.mineOk) return
+        if (!this.cardsOk) return
         this.focus = this.focus === k ? '' : k
-        this.phaseFilter = ''; this.activeTab = 'all'
+        this.phaseFilter = ''; this.activeTab = this._defTab
       },
       get conditions() {
         const c = []
-        if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '您是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
-        const f = { todo: '待我處理', waiting: '等待他人', won: '本月已成案' }[this.focus]
+        if (this._isSuper && this.focus) c.push({ key: 'company', label: '全公司', hint: '最高管理者的三個數字與其篩選涵蓋全公司的報價單。按「清除條件」回到列表。' })
+        else if (this.focus || this._mineLimit) c.push({ key: 'mine', label: '我負責的', hint: '您是業務、被指派，或在案件角色裡的報價單。按「清除條件」看全部。' })
+        const f = (this._isSuper ? { todo: '待處理', waiting: '簽核中', won: '本月已成案' } : { todo: '待我處理', waiting: '等待他人', won: '本月已成案' })[this.focus]
         if (f) c.push({ key: 'focus', label: f })
         const ph = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
         if (ph) c.push({ key: 'phase', label: ph.label })
@@ -879,7 +893,7 @@
       _uk() { return (this.session && (this.session.username || this.session.id)) || 'u' },
       _loadPrefs() {
         try {
-          const m = localStorage.getItem('motrix_quote_mine:' + this._uk())
+          const m = localStorage.getItem(this._mineKey())
           this._mineChoice = m === '0' ? false : m === '1' ? true : null
           const c = JSON.parse(localStorage.getItem('motrix_quote_cols:' + this._uk()) || 'null')
           if (c && Array.isArray(c.hidden)) this.colPrefs = { hidden: c.hidden.filter(k => this.COL_OPTIONAL.includes(k)), compact: c.compact === true }
@@ -921,10 +935,10 @@
       // E1：空狀態分三種（none 從未有資料／filtered 篩選後沒有／error 載入失敗）
       get emptyKind() { return this.loadErr ? 'error' : (this.quotes.length ? 'filtered' : 'none') },
       get hasActiveFilter() {
-        return !!(this._mineLimit || this.focus || this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.filterDocType || this.phaseFilter || this.activeTab !== 'all')
+        return !!(this._mineLimit || this.focus || this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.filterDocType || this.phaseFilter || this.activeTab !== this._defTab)
       },
       clearFilters() {
-        this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.filterDocType = ''; this.phaseFilter = ''; this.activeTab = 'all'
+        this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.filterDocType = ''; this.phaseFilter = ''; this.activeTab = this._defTab
         this.focus = ''; this.showAll = true
       },
 
@@ -935,6 +949,8 @@
           let matchTab
           if (this.phaseFilter || this.focus) {
             matchTab = true
+          } else if (this.activeTab === 'every') {
+            matchTab = true                                                  // 「全部」：所有狀態（含已結案、未成案、已取消）
           } else if (this.activeTab === 'all') {
             matchTab = (q.deal_tag || '') !== '未成案' && (q.deal_tag || '') !== '已結案'
           } else {
@@ -950,7 +966,7 @@
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
           const matchDocType = !this.filterDocType || (q.doc_type || 'quote') === this.filterDocType
           const matchPhase   = !this.phaseFilter || this.lifecycleOf(q) === this.phaseFilter
-          const matchFocus   = !this.focus || (this._isMineQ(q) && (this.focus === 'todo' ? this._isTodo(q) : this.focus === 'waiting' ? this._isWaiting(q) : this._isWon(q)))
+          const matchFocus   = !this.focus || (this._inCardScope(q) && (this.focus === 'todo' ? this._isTodo(q) : this.focus === 'waiting' ? this._isWaiting(q) : this._isWon(q)))
           return this._matchMine(q) && matchFocus && matchTab && matchSearch && matchSales && matchMonth && matchDealTag && matchDocType && matchPhase
         })
         return applyListSort(base, this.sortPref, {
@@ -964,7 +980,7 @@
 
       // 三個數字的定義固定（見 UX-BUSINESS-PAGES-PROPOSAL §3.3）：要我處理／等別人 只算「我負責的」；本月已成案沿用既有口徑（成案標記為已成案／已結案、本月報價的張數與金額）
       _computeSummary() {
-        const mine = this.quotes.filter(q => this.mineSet.has(q.quote_no))
+        const mine = this.quotes.filter(q => this._inCardScope(q))      // 最高管理者＝全公司（名稱沿用 mine，範圍見 _inCardScope）
         const won = mine.filter(q => this._isWon(q))
         this.summaryData = {
           todo:     mine.filter(q => this._isTodo(q)).length,
@@ -1015,7 +1031,7 @@
       // 第一次載入：讀回記住的選擇（沒記過 ⇒ 預設開）；名單空或讀不到時畫面自動顯示全部（見 _mineLimit／mineNote），不改寫記住的選擇
       _applyMineDefault(mineOk) {
         this.mineOk = mineOk
-        if (!this._mineApplied) { this._mineApplied = true; this.onlyMine = this._mineChoice !== false }     // 記住的選擇：只有明確關掉過才是 false；沒記過 ⇒ 開
+        if (!this._mineApplied) { this._mineApplied = true; this.onlyMine = this._mineChoice === null || this._mineChoice === undefined ? !this._isSuper : this._mineChoice }     // 記住的選擇優先；沒記過 ⇒ 一般角色開、最高管理者關（看全部）
       },
 
       // S-X2：狀態顯示名稱與顏色（旗標 builder_status_display 關或沒改過 ⇒ 與下面的 _dealDisplayBase 逐字相同）。邏輯一律用 q.status／q.deal_tag 原值。
@@ -1290,7 +1306,7 @@
         }
         this.pv = LV.sanitize(loaded, { tabs: this.tabs.map(t => t.key) })
         this.lvReady = true
-        if (this.lvOn.tab && this.pv.tab && this.activeTab === 'all' && !this._restoredTab) this.activeTab = this.pv.tab
+        if (this.lvOn.tab && this.pv.tab && this.activeTab === this._defTab && !this._restoredTab) this.activeTab = this.pv.tab
         if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter', 'focus', 'onlyMine'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
         if (this.lvOn.columns) {
           await this.$nextTick()
@@ -1333,6 +1349,7 @@
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch { window.location.href = 'login.html'; return }
         this._loadPrefs()
+        this.activeTab = this._defTab         // 最高管理者預設「全部」；其他角色「進行中」。頁籤不另存 localStorage：預設由角色決定，只有同一個瀏覽器分頁內的選擇會還原（下方 sessionStorage）
         this.initLayout()
         this.initStatusDisplay()           // S-X2：旗標 builder_status_display 關 ⇒ 什麼都不改（只多一次公開設定讀取）
 
@@ -1345,13 +1362,13 @@
 
         // 2026-09-24：篩選條件存 sessionStorage（同一個瀏覽器分頁內有效），
         // 從報價單返回清單時還原，不必重選。讀寫失敗（私密視窗等）就當作沒有。
-        const _FK = 'motrix_quote_list_filters'
+        const _FK = this._isSuper ? 'motrix_quote_list_filters_v2' : 'motrix_quote_list_filters'      // 最高管理者換新 key：同一分頁裡舊版存的 activeTab='all'（當時的預設）不當成他選的頁籤
         const _FIELDS = ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'filterDocType', 'phaseFilter', 'focus']
         try {
           const saved = JSON.parse(sessionStorage.getItem(_FK) || 'null')
           if (saved && typeof saved === 'object') {
             _FIELDS.forEach(k => { if (typeof saved[k] === 'string') this[k] = saved[k] })
-            if (!this.tabs.some(t => t.key === this.activeTab)) this.activeTab = 'all'
+            if (!this.tabs.some(t => t.key === this.activeTab)) this.activeTab = this._defTab
             if (typeof saved.activeTab === 'string') this._restoredTab = true      // 同一分頁剛篩選過的條件優先於個人預設頁籤
           }
         } catch (e) {}
