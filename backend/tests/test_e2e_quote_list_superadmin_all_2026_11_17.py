@@ -140,7 +140,8 @@ def test_superadmin_number_cards_are_company_wide_and_labelled(live_server, make
     # 點卡片＝全公司的篩選：待處理 3 張（含他人的），條件列寫「全公司」
     page.get_by_test_id("ql-sum-todo").click()
     assert sorted(_rows(page)) == ["MQ-SAEF-001", "MQ-SAEF-002", "MQ-SAEF-003"]
-    assert page.get_by_test_id("ql-cond-company").count() == 1 and page.get_by_test_id("ql-cond-mine").count() == 0
+    expect(page.get_by_test_id("ql-cond-company")).to_have_count(1)
+    expect(page.get_by_test_id("ql-cond-mine")).to_have_count(0)
     page.get_by_test_id("ql-sum-todo").click()
     page.get_by_test_id("ql-sum-won").click()
     assert sorted(_rows(page)) == ["MQ-SAEF-005", "MQ-SAEF-006"]
