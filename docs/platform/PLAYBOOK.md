@@ -265,6 +265,8 @@
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 
+> **交件前的機器版自查**：本清單裡能機器化的項目，由 `tools/platform/precheck.py` 一次跑完（§G8）；交件訊息必附 `PRECHECK PASS` 那一行。
+
 ### G2. 單位卡：讓人和 AI 不必讀完整個檔案（底層加註）
 
 - **每個 L0／L1 檔案的開頭寫一張「單位卡」**（模組 docstring 的固定格式），要在 30 行以內讀懂：
@@ -414,3 +416,40 @@
 3. 之後才開下一班；使用者驗收項（會寫資料的、要各角色帳號的）留給使用者，不在正式機代測。
 
 **過期的摘要（已知，待處理）**：`docs/platform/CACHE-INDEX.md` 的各段「來源 commit」落後（守門 `test_cache_index_fresh.py` 只警告不擋）。沒有重產工具，要人讀原檔對應章節後改摘要、換來源 commit；§G7 與 `PROD-DEV-CHANNEL.md` §6～§8 是這次新增的，下次更新 CACHE-INDEX 時要一併納入。
+
+### G8. 開發與審查規範：降低 token、交件前先過 precheck（使用者 2026-11-18 裁示，未來所有開發一律遵守；來源 `D:\Claude-pm\handoff\DEV-RULES-TOKEN.md`，條號沿用）
+
+適用：PM、所有開發視窗、整合者、審查者。新視窗開工前必讀。
+
+**一、視窗與並行**
+1. 一張工單一個新視窗；工單交件（SHA 核准）後該視窗清除或關閉，下一張開新視窗，不在同一視窗連做好幾張。
+2. 同一班同時並行的開發視窗以 3～4 個為上限。
+3. 例行工作（狀態追蹤、合併、跑測試、紅燈歸因）用較小模型（Sonnet／Haiku）；設計與審查才用 Opus。
+
+**二、交件前自檢（precheck）**
+4. 作者交件前必跑 precheck 速檢，並安裝 pre-push hook。
+   - 跑法：`python tools/platform/precheck.py`（Python 用 .venv312；`--static-only` 只跑秒級靜態；`--base <ref>` 指定基準；預設基準＝最近的整合線〔origin/platform 與 train/* 中離 HEAD 最近者〕）。
+   - 內容：靜態＝prepush_check（train_preflight 的 A1～A8、P0、C1、F1）＋守門測試一次 pytest——檔清單唯一一份在 `tools/platform/precheck_sets.json`，另含 `preflight_guards.json` 的便宜題組（`preflight_groups`）；新增一類守門＝在 precheck_sets 新增一列（寫 why／fix）。需要完整題組時另跑 `preflight_guards.py --window <代號>`。
+   - 安裝：`python tools/platform/install_hooks.py`（每個 clone 一次，worktree 共用；`--check` 可驗證）。一般分支 push 會自動跑 precheck，FAIL 擋、INCOMPLETE 只警告。
+   - 輸出分兩類：「作者要修」（附一行修法）與「收尾類（整合者處理）」；最後一行 `PRECHECK PASS|FAIL|INCOMPLETE — …` 帶計數與 head，可整行貼進交件訊息。**PRECHECK PASS ≠ 閘門綠。**
+5. 交件訊息必附「PRECHECK PASS」那一行（含 `head=<sha> clean`，與交件的 SHA 一致）；沒附、或標 dirty／INCOMPLETE／FAIL，審查者不審。
+6. 審查者核准前同樣跑 precheck（`--base` 本班基準分支）。
+7. 收尾類紅燈（manifest 日期、version_slots、changelog、FORM_VERSION 台帳、UNIT-INDEX、test_map、dep_graph、A0 產生檔）由整合者處理，作者不必修——precheck 把這類列在「收尾類」，不計入 FAIL。（分支上仍須照 §G6 寫 `(next)` 佔位，也不得提交產生檔：P0 屬「作者要修」。）
+8. 不得用 `--no-verify` 交件；`--no-verify` 只給緊急（hook／基礎設施本身壞了），用了要在推送說明寫理由。`known_flakes.json` 保持空。
+
+**三、測試輸出**
+9. 一律用精簡輸出（`-q --tb=line`），完整 log 寫檔；畫面只看計數＋失敗測試 id：`python tools/platform/run_tests_summary.py <檔…>`（螢幕 ≤ 20 行，最後一行是 log 路徑）。
+10. 要看細節時用 grep 從 log 撈單筆，不整份讀 log。
+11. 作者只跑受影響的測試：`python tools/platform/run_tests_summary.py --affected [--base <ref>] [--dry-run]`（依 test_map／dep_graph 選題；對不到測試的改動檔會列出，不代表安全）。完整 not_e2e＋e2e 只由整合者在閘門跑。
+
+**四、讀檔與溝通**
+12. 大檔（quotation-form.html、quotations.py、pdf_gen.py 等）只讀需要的行段（grep 定位＋offset／limit），不整檔讀。
+13. 跨視窗訊息只在里程碑：交件 SHA、功能性紅燈、需要裁示。不發進度閒聊、不副本。
+14. 紅燈直接由整合者派給原作者，不經 PM 轉述；PM 只收「全部轉綠」或「需裁示」。
+15. 截圖、預覽圖只在使用者要求時產出。
+16. PM 追蹤以事件回報為主，定時檢查最多每 30 分鐘一次，只用便宜查法（ListAgents、git log -1、log tail）。
+
+**五、程式結構（下一班起）**
+17. 拆大檔：quotation-form.html、quotations.py 拆成子檔；之後新增功能放在對應子檔，不再往單一大檔堆。
+
+**precheck 的邊界**：預設跑法目標約 2 分鐘（以 1 worker 為準；`--workers 2` 會走 heavy 排隊，別人在跑重型時要等）。清單只收「靜態掃描／規格類」守門，不含 e2e 與需要整棵樹的重型題；沒跑到的檔、題數低於下限一律算「未能檢查」（INCOMPLETE），不當綠。

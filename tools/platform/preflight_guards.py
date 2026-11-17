@@ -297,8 +297,8 @@ def python_exe():
     return str(cand) if cand.exists() else sys.executable
 
 
-def build_cmd(python, targets, workers, basetemp, marker="not e2e", junit=None):
-    return [python, "-m", "pytest", *targets, "-q", "-rfE", "--tb=short", "-m", marker,
+def build_cmd(python, targets, workers, basetemp, marker="not e2e", junit=None, tb="short"):
+    return [python, "-m", "pytest", *targets, "-q", "-rfE", "--tb=%s" % tb, "-m", marker,
             *(["-n", str(workers)] if workers and workers >= 2 else ["-p", "no:xdist"]), "-p", "no:cacheprovider", "--basetemp=%s" % basetemp,
             *(["--junitxml=%s" % junit, "-o", "junit_family=xunit2"] if junit else [])]
 
@@ -354,13 +354,13 @@ def _make_runner(backend, holder, budget_s, tee=True, by_branch=True):
     return runner
 
 
-def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True, by_branch=True):
+def run_pytest(repo, targets, workers, window, marker="not e2e", queue_cls=None, budget_min=DEFAULT_BUDGET_MIN, max_wait=None, hr=None, tee=True, by_branch=True, tb="short"):
     """⇒ (rc, 輸出全文, 秒數, junit xml 文字或 None)。重型（-n≥2）經 heavy_run 排隊；排不到（75）⇒ rc 75。"""
     backend = Path(repo) / "backend"
     stamp = "%d_%d" % (os.getpid(), int(time.time() * 1000))
     basetemp = os.path.join(tempfile.gettempdir(), "pfg_%s" % stamp)
     junit = os.path.join(tempfile.gettempdir(), "pfg_%s.xml" % stamp)
-    cmd = build_cmd(python_exe(), targets, workers, basetemp, marker, junit)
+    cmd = build_cmd(python_exe(), targets, workers, basetemp, marker, junit, tb)
     holder = {"out": "", "secs": 0.0}
     runner = _make_runner(backend, holder, budget_min * 60 if budget_min else None, tee, by_branch)
     cls = queue_cls or ("heavy" if workers and workers >= 2 else "light")

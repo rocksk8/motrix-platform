@@ -25,6 +25,7 @@
 *.yml           text eol=lf
 *.yaml          text eol=lf
 *.sql           text eol=lf
+.githooks/*     text eol=lf
 
 # Windows 腳本：CRLF（cmd.exe 與 PowerShell 5.1 需要；.ps1 另需 UTF-8 BOM）
 *.bat           text eol=crlf

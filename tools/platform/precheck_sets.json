@@ -1,0 +1,175 @@
+{
+ "_doc": "precheck.py 的守門檔清單（作者交件前的快檢；目標 ≤ 2 分鐘）。唯一一份：新增一類守門＝新增一列並寫 why／fix；守門題 test_precheck_sets 驗每個檔都存在、沒有重複（防死條目）。class：author＝作者要修；closing＝收尾類（版號、產生檔等由整合者列車統一處理，不擋交件）。fix 是紅燈時印給作者的一行修法（守門自己的訊息優先印在前面）。 實測（2026-11-18，單 worker）：整份約 230～280 worker-秒、-n 2 約 2 分鐘；挑選原則＝便宜、規格／靜態掃描類、近期最常被整合者退件。已移出（太慢，改由列車／author_gate／preflight_guards 完整題組負責）：test_generated_maps(33s，收尾類)、response_keys_baseline(32s)、wording_guards(17s)、case_pdf_money_guard(11s)、begin_only(12s)、write_endpoints(9s)、exception_detail_leak(8s)、u0a 組(16s)。要加回就先量秒數、總量不得超過約 270 worker-秒。",
+ "closing_groups": [
+  "version_manifest",
+  "version_slots",
+  "changelog"
+ ],
+ "preflight_groups": [
+  "page_paths",
+  "route_inventory",
+  "view_filter",
+  "version_manifest",
+  "spec_coverage"
+ ],
+ "files": [
+  {
+   "path": "tests/platform/test_module_boundaries.py",
+   "why": "模組邊界：不准跨模組 import／讀別的模組原始碼",
+   "fix": "改走 L1／connector（core、helpers）；題目不要讀別的模組檔（PLAYBOOK G5 #12）"
+  },
+  {
+   "path": "tests/platform/test_l1_does_not_load_m01.py",
+   "why": "L1 不得載入 M01（案件）",
+   "fix": "L1 helpers 不要 import modules.case；改走註冊的 provider／connector"
+  },
+  {
+   "path": "tests/platform/test_l1_interface_snapshot.py",
+   "why": "L1 介面快照",
+   "fix": "L1 公開介面有改＝有意改動時依訊息更新快照並在 CHANGELOG 寫明"
+  },
+  {
+   "path": "tests/test_pdf_escape_2026_10_14.py",
+   "why": "PDF／mail HTML 的 f-string 插值必須 esc／money／int（棘輪）",
+   "fix": "把新增的 f\"{x['k']}\" 插值包 esc()／money()／int()；不要去調高棘輪基準"
+  },
+  {
+   "path": "tests/test_mail_escape_2026_10_14.py",
+   "why": "信件 HTML 跳脫",
+   "fix": "信件內文插值用 esc()"
+  },
+  {
+   "path": "tests/platform/test_e2e_lint_2026_11_13.py",
+   "why": "e2e 寫法：不驗 Alpine 模型、等終點不等時間",
+   "fix": "e2e 斷言改驗 DOM／資料庫終點；等待用 wait_for(state=…)，不用 is_visible() 立即斷言／固定 sleep"
+  },
+  {
+   "path": "tests/platform/test_no_text_anchor_in_tests_2026_11_14.py",
+   "why": "測試不得用文字子字串當計數／錨點（split／index／find／count／findall）",
+   "fix": "改用 data-testid、HTMLParser 結構或 AST，不要在測試裡對文字字面值做子字串運算"
+  },
+  {
+   "path": "tests/platform/test_audit_reads_scoped_to_own_rows_2026_11_14.py",
+   "why": "測試讀全域稽核表要依自己的使用者／request 篩選",
+   "fix": "SELECT audit_log 加 WHERE username／target_id 限縮到自己這題建的資料"
+  },
+  {
+   "path": "tests/platform/test_case_summary_purpose.py",
+   "why": "案件摘要用途登記",
+   "fix": "新增案件摘要欄位／connector 時照訊息登記用途"
+  },
+  {
+   "path": "tests/platform/test_page_paths_centralized.py",
+   "why": "頁面路徑集中：不准寫死 frontend/pages",
+   "fix": "改用 core.source_tree.page_file()／page_files()；JS 用 FS.all_js()"
+  },
+  {
+   "path": "tests/platform/test_no_direct_js_enumeration_2026_11_08.py",
+   "why": "不直接列舉 JS 檔",
+   "fix": "改用 FS.all_js()"
+  },
+  {
+   "path": "tests/platform/test_route_inventory.py",
+   "why": "路由盤點",
+   "fix": "新增／刪除路由後依訊息更新路由清單，並同 commit 更新 route_table_golden（G5 #20）"
+  },
+  {
+   "path": "tests/platform/test_json_extract_ratchet.py",
+   "why": "SQL 不准新增 json_extract(data_json…)（棘輪）",
+   "fix": "改為逐筆 Python 解析（approval_json_of），不要新增 json_extract"
+  },
+  {
+   "path": "tests/platform/test_unscoped_reads_ratchet.py",
+   "why": "未限縮的讀取（棘輪）",
+   "fix": "讀取加案件／使用者範圍條件"
+  },
+  {
+   "path": "tests/platform/test_ratchet_2026_11_14.py",
+   "why": "棘輪共用機制",
+   "fix": "新增違規＝棘輪紅；修掉新違規，不要調高基準"
+  },
+  {
+   "path": "tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
+   "why": "不吞字典鍵",
+   "fix": "不要在 except／過濾中悄悄丟欄位"
+  },
+  {
+   "path": "tests/platform/test_no_import_time_clock_2026_10_09.py",
+   "why": "模組載入時不取時鐘",
+   "fix": "時間在函式內取，不放模組層"
+  },
+  {
+   "path": "tests/platform/test_no_window_guard_2026_10_03.py",
+   "why": "背景子行程不彈視窗",
+   "fix": "subprocess 加 creationflags=CREATE_NO_WINDOW"
+  },
+  {
+   "path": "tests/platform/test_tests_imports_resolve_2026_11_14.py",
+   "why": "測試 import 的模組必須存在",
+   "fix": "修正 import 路徑或補上被引用的檔"
+  },
+  {
+   "path": "tests/platform/test_module_routes_declared.py",
+   "why": "模組路由要在 module.json 宣告",
+   "fix": "在 module.json 宣告新路由"
+  },
+  {
+   "path": "tests/platform/test_changelog_sections.py",
+   "why": "CHANGELOG 節次格式",
+   "fix": "`## (next) — 日期（分支）` 放最上面；取號後版號由上往下遞減",
+   "class": "closing"
+  },
+  {
+   "path": "tests/platform/test_unit_cards.py",
+   "why": "單位卡",
+   "fix": "新工具／模組檔補 [單位] 卡片抬頭"
+  },
+  {
+   "path": "tests/platform/test_guard_patterns_2026_10_02.py",
+   "why": "檔名樣式守門的樣式要命中真實檔",
+   "fix": "刪除沒有命中任何檔的樣式或補檔"
+  },
+  {
+   "path": "tests/platform/test_settings_banned_words_2026_11_14.py",
+   "why": "設定畫面禁用詞",
+   "fix": "改用白話用語，照訊息列出的詞替換"
+  },
+  {
+   "path": "tests/platform/test_wording_material_request_2026_10_02.py",
+   "why": "用語守門",
+   "fix": "改用既定用語"
+  },
+  {
+   "path": "tests/test_view_filter_marking_2026_09_25.py",
+   "why": "列表檢視篩選標記",
+   "fix": "篩選輸入框 class 含 filter／search（G5 #21）"
+  },
+  {
+   "path": "tests/test_js_asi_hazard_guard_2026_11_13.py",
+   "why": "JS 自動分號陷阱",
+   "fix": "行首不要接 ( [ ` 開頭，前一行補分號"
+  },
+  {
+   "path": "tests/test_guard_no_star_kwargs_2026_11_13.py",
+   "why": "守門函式不吃 *args／**kwargs",
+   "fix": "明確列出參數"
+  },
+  {
+   "path": "tests/test_status_display_canonical_lint_2026_10_14.py",
+   "why": "狀態顯示字串用標準對照",
+   "fix": "狀態顯示用標準對照函式"
+  },
+  {
+   "path": "tests/test_version_manifest_2026_09_22.py",
+   "why": "版本紀錄",
+   "fix": "版本號由列車定；分支只寫佔位",
+   "class": "closing"
+  },
+  {
+   "path": "tests/platform/test_version_slots.py",
+   "why": "版號佔位",
+   "fix": "分支只寫 (next) 佔位，不取號",
+   "class": "closing"
+  }
+ ]
+}

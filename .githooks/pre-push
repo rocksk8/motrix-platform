@@ -1,7 +1,10 @@
 #!/bin/bash
-# pre-push（SPEEDUP-PREPUSH-T50）：推送前跑 tools/platform/prepush_check.py（< 60 秒、只讀）。
-# 紅 ⇒ 擋推送；未完成（超過時間預算）、整合分支（train/*、platform）⇒ 只警告、放行。
-# 逃生口：git push --no-verify（用了請在推送說明寫理由）。安裝：python tools/platform/setup_prepush.py
+# pre-push（SPEEDUP-PREPUSH-T50；T88 起一般分支改跑 precheck）：
+#   一般分支 ⇒ tools/platform/precheck.py --hook（靜態＋守門測試，約 2 分鐘；紅 ⇒ 擋；未完成／排隊逾時 ⇒ 只警告放行，但交件訊息不能附 PRECHECK PASS）
+#   整合分支（train/*、platform）⇒ prepush_check.py --hook --integration（只警告、放行）
+# 逃生口：git push --no-verify 只給緊急（基礎設施壞了、你在修 hook 本身）；**交件（要送審的 SHA）不得使用**——
+#   DEV-RULES-TOKEN 第 8 條，docs/platform/PLAYBOOK.md §G8。用了請在推送說明寫理由。
+# 安裝：python tools/platform/install_hooks.py（worktree 共用 repo 本地設定，每個 clone 做一次）
 PY="${MOTRIX_PY:-D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe}"
 [ -x "$PY" ] || PY=python
 ZERO=0000000000000000000000000000000000000000
@@ -17,8 +20,12 @@ while read -r lref lsha rref rsha; do
   branch="${rref#refs/heads/}"
   mode=""
   case "$branch" in train/*|platform) mode="--integration" ;; esac
-  "$PY" -X utf8 "$root/tools/platform/prepush_check.py" --hook $mode || {
-    echo "[prepush] 推送被擋下：修好上面的紅燈再推（緊急才用 --no-verify，並寫理由）"
+  if [ -z "$mode" ] && [ -f "$root/tools/platform/precheck.py" ]; then
+    "$PY" -X utf8 "$root/tools/platform/precheck.py" --hook </dev/null
+  else
+    "$PY" -X utf8 "$root/tools/platform/prepush_check.py" --hook $mode </dev/null
+  fi || {
+    echo "[prepush] 推送被擋下：修好上面「作者要修」的紅燈再推（--no-verify 只給緊急，交件不得用；用了要寫理由）"
     exit 1
   }
 done
