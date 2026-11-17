@@ -344,6 +344,65 @@ def _tax_line_label(q: dict) -> str:
     return "營業稅 %s%%" % q.get("taxRate", 5)
 
 
+def _alt_plans_html(q: dict, pl: dict, total_text) -> str:
+    """擇一未選完時的「各方案金額」小表（取代合計框；T88）。資料來自提供者 `case.alt_view` 的 `plans`（只有金額，沒有成本）。
+    所有可變文字一律 esc；只用 inline style，不動全域 CSS ⇒ 沒擇一的單輸出逐位元不變。資料不完整 ⇒ 回 ''（呼叫端退回原合計框）。"""
+    esc = lambda s: _html_text(str(s) if isinstance(s, int) else s, falsy_empty=True)      # 與 _build_quote_html_core 內的 esc 同一個跳脫函式
+    try:
+        mode = pl.get('mode')
+        money = lambda v: f'NT$ {int(v):,}'
+        hint = (esc(total_text) + '：' if total_text else '') + esc(pl.get('hint') or '')
+        th = 'style="background:#0A0A0A;color:#F5F4F0;padding:8px 9px;text-align:center;font-size:11px;font-weight:500"'
+        td_l = 'style="text-align:left"'
+        if mode == 'combos':
+            show_pretax = bool(pl.get('show_pretax'))
+            head = (f'<th {th}>方案</th><th {th}>品項小計（未稅）</th>'
+                    + (f'<th {th}>稅前合計</th>' if show_pretax else '')
+                    + f'<th {th}>{esc(_tax_line_label(q))}</th><th {th}>總計</th>')
+            body = ''
+            for r in pl['rows']:
+                name = esc(r['no']) + (f'　項次 {esc(r["numbers"])}' if r.get('numbers') else '') + (f'　{esc(r["name"])}' if r.get('name') else '')
+                body += (f'<tr><td {td_l}>{name}</td><td class="r">{money(r["subtotal"])}</td>'
+                         + (f'<td class="r">{money(r["pretax"])}</td>' if show_pretax else '')
+                         + f'<td class="r">{money(r["tax"])}</td><td class="r" style="font-weight:700;font-size:13px">{money(r["total"])}</td></tr>')
+        elif mode == 'groups':
+            head = f'<th {th}>組別</th><th {th}>選項</th><th {th}>金額（未稅）</th>'
+            body = ''
+            for g in pl['groups']:
+                for k, o in enumerate(g['options']):
+                    nm = (f'項次 {esc(o["number"])}' if o.get('number') else '') + (f'　{esc(o["name"])}' if o.get('name') else '')
+                    body += (f'<tr><td {td_l}>{esc(g["group"]) if k == 0 else ""}</td><td {td_l}>{nm}</td>'
+                             f'<td class="r" style="font-weight:700">{money(o["amount"])}</td></tr>')
+        else:
+            return ''
+        notes = []
+        c = pl.get('common')
+        if c and c.get('amount'):
+            nums = '、'.join(esc(n) for n in c.get('numbers') or [])
+            where = f'（項次 {nums}）' if nums else ''
+            notes.append(f'各方案皆含共同品項 {money(c["amount"])}{where}；上列品項小計已含共同品項。' if mode == 'combos'
+                         else f'共同品項 {money(c["amount"])}{where}，各組選定後依所選項目另加計算總計。')
+        elif mode == 'groups':
+            notes.append('各組選定後依所選項目加總計算總計。')
+        adj = []
+        if pl.get('freight'):
+            adj.append(f'運費 {money(pl["freight"])}')
+        if pl.get('discount'):
+            adj.append(f'折讓 -{money(pl["discount"])}')
+        if adj:
+            notes.append('各方案同：' + '、'.join(adj) + ('（已計入稅前合計）' if mode == 'combos' else '。'))
+        notes_html = ''.join(f'<div style="font-size:11px;color:#666;margin-bottom:6px">{n}</div>' for n in notes)
+        return (
+            f'<div style="font-size:11px;color:#666;margin:0 0 6px">{hint}</div>\n'
+            '<div style="border:1px solid #EDEAE4;border-radius:4px;overflow:hidden;margin-bottom:8px">'
+            f'<table style="margin-bottom:0"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>\n'
+            f'{notes_html}\n'
+        )
+    except (KeyError, TypeError, ValueError):
+        logger.exception("alt plans render failed")
+        return ''
+
+
 def _alt_view(q: dict) -> dict:
     """擇一方案的客戶版輸出資料（提供者 `case.alt_view`，M3；只含客戶看得到的內容）。沒有擇一品項、案件模組不在、或提供者出錯 ⇒ {}（照舊全部印出）。"""
     try:
@@ -593,6 +652,17 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     total_txt  = esc(_alt_tt) if _alt_tt else f'NT$ {int(total):,}'
     freight_row  = f'<div class="total-row"><span>運費</span><span>NT$ {int(freight):,}</span></div>' if freight else ''
     discount_row = f'<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ {int(discount):,}</span></div>' if discount else ''
+    # 擇一未選完（T88）：合計框改成「各方案金額」小表；有提供者資料才走，其餘（含全選定、沒擇一）維持原合計框逐位元不變
+    totals_block = (_alt_plans_html(q, av.get('plans'), _alt_tt) if av.get('plans') else '') or (
+        '<div class="totals">\n'
+        f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
+        f'  {freight_row}\n'
+        f'  {discount_row}\n'
+        f'  <div class="total-row"><span>稅前合計</span><span>{pretax_txt}</span></div>\n'
+        f'  <div class="total-row"><span>{_tax_line_label(q)}</span><span>NT$ {int(tax):,}</span></div>\n'
+        f'  <div class="total-row"><span>總　計</span><span>{total_txt}</span></div>\n'
+        '</div>\n'
+    )
 
     from helpers.quote_output import hidden_terms as _hidden_terms      # T63 Q0：管理者隱藏的條件欄位，設定選「不印」時才拿掉（預設 ⇒ 空集合 ⇒ 與過去相同）
     _hid_terms = _hidden_terms()
@@ -796,14 +866,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '</table>\n'
         '<div class="totals-group">\n'
         f'<div class="section-label" style="margin-bottom:8px;margin-top:14px;color:#666">四、{_dpre}合計</div>\n'
-        '<div class="totals">\n'
-        f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
-        f'  {freight_row}\n'
-        f'  {discount_row}\n'
-        f'  <div class="total-row"><span>稅前合計</span><span>{pretax_txt}</span></div>\n'
-        f'  <div class="total-row"><span>{_tax_line_label(q)}</span><span>NT$ {int(tax):,}</span></div>\n'
-        f'  <div class="total-row"><span>總　計</span><span>{total_txt}</span></div>\n'
-        '</div>\n'
+        f'{totals_block}'
         '</div>\n'
         f'{terms_section}\n'
         '<div style="height:32px"></div>\n'

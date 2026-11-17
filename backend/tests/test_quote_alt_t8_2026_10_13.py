@@ -133,17 +133,22 @@ def test_pdf_no_alt_quote_identical_with_or_without_provider(client, monkeypatch
 
 def test_pdf_pending_shows_total_text_tags_and_note(client):
     h = _html(_q(totalsByAlt=True))
-    assert h.count("依方案選擇") == 2                        # 稅前合計、總計兩格
+    # T88（2026-11-17，有意的變更）：未選完不再把「稅前合計」「總計」兩格換成文字，改列各方案金額；
+    # 設定中心的 total_text 改放在方案表標題下的說明（只出現一次），細節見 test_quote_alt_plan_totals_2026_11_17.py
+    assert h.count("依方案選擇") == 1 and "依方案選擇：請擇一方案，回簽時勾選" in h
     assert "〔擇一：投影機〕" in h and "〔擇一：線材〕" in h
     assert "項次2、3為投影機擇一方案選擇" in h and "保固一年" in h
     assert h.index("保固一年") < h.index("項次2、3為投影機")     # 自動句接在使用者備註之後
 
 
 def test_pdf_unpicked_never_prints_partial_total_even_without_flag(client):
+    # T88：仍然不印「只算共同品項」的部分合計；改成每個方案各印完整金額（共同品項＋該方案品項）
     q = _q()
     h = _html(q)
-    assert h.count("依方案選擇") == 2
+    assert h.count("依方案選擇") == 1
     assert "NT$ %s" % format(PG.server_totals(q)["total"], ",") not in h
+    for picks in ({"投影機": "x1", "線材": "y1"}, {"投影機": "x2", "線材": "y2"}):
+        assert "NT$ %s" % format(PG.server_totals(dict(q, altPicks=picks))["total"], ",") in h
 
 
 def test_pdf_picked_restores_numbers_and_drops_unpicked(client):
